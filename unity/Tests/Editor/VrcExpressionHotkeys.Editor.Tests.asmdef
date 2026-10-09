@@ -1,0 +1,15 @@
+{
+  "name": "VrcExpressionHotkeys.Editor.Tests",
+  "rootNamespace": "VrcExpressionHotkeys.EditorTools.Tests",
+  "references": ["VrcExpressionHotkeys.Editor"],
+  "includePlatforms": ["Editor"],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": ["UNITY_INCLUDE_TESTS"],
+  "versionDefines": [],
+  "optionalUnityReferences": ["TestAssemblies"],
+  "noEngineReferences": false
+}

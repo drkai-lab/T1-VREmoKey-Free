@@ -1,0 +1,19 @@
+{
+  "name": "com.drkai-lab.vrc-expression-hotkeys",
+  "version": "1.0.0",
+  "displayName": "VRChat Expression Hotkeys",
+  "description": "Free edition. Name avatar expressions, render face previews, and export a profile pack. Editor tools use reflection, so a project without the VRChat SDK still compiles.",
+  "unity": "2021.3",
+  "unityRelease": "0f1",
+  "dependencies": {},
+  "keywords": [
+    "OSC",
+    "expression",
+    "VRChat",
+    "avatar"
+  ],
+  "author": {
+    "name": "drkai-lab",
+    "url": "https://github.com/drkai-lab/vrc-expression-hotkeys"
+  }
+}

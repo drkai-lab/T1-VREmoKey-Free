@@ -1,0 +1,96 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    name: linux (lint, tests, tarball)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install lint tooling
+        run: pip install ruff
+      - name: Lint
+        run: ruff check .
+      - name: Tests
+        run: python3 tests/test_hotkeys.py
+      - name: CLI smoke test
+        run: |
+          python3 vrc-expression-hotkeys.py --version
+          python3 vrc-expression-hotkeys.py --help > /dev/null
+      - name: Tarball
+        id: tarball
+        run: |
+          ./build-release.sh
+          version="$(sed -n 's/^VERSION = "\(.*\)"/\1/p' vrc-expression-hotkeys.py)"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-tarball
+          path: |
+            dist/vrc-expression-hotkeys-linux-${{ steps.tarball.outputs.version }}.tar.gz
+            dist/vrc-expression-hotkeys-linux-${{ steps.tarball.outputs.version }}.tar.gz.sha256
+          if-no-files-found: error
+
+  windows:
+    name: windows (.exe + installer)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Tests
+        run: python3 tests/test_hotkeys.py
+      - name: Install PyInstaller
+        run: pip install pyinstaller
+      - name: Build console exe
+        run: pyinstaller --noconfirm windows/vrc-expression-hotkeys.spec
+      - name: Build windowed exe
+        run: pyinstaller --noconfirm windows/vrc-expression-hotkeys-gui.spec
+      - name: Launch smoke test
+        run: |
+          ./dist-win/vrc-expression-hotkeys.exe --version
+          ./dist-win/vrc-expression-hotkeys.exe --help > /dev/null
+          ./dist-win/vrc-expression-hotkeys-gui.exe --version
+      - name: Install Inno Setup
+        run: choco install innosetup -y
+      - name: Build installer
+        run: iscc windows/installer.iss
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64
+          path: dist-win/*.exe
+          if-no-files-found: error
+
+  release:
+    name: attach binaries to the release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [linux, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF_NAME}" --generate-notes out/*

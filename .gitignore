@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+dist/
+dist-win/
+build/
+.ruff_cache/
+.writeok
