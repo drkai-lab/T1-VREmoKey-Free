@@ -3,7 +3,7 @@
 #define AppName "VRChat Expression Hotkeys"
 #define AppVersion "1.0.0"
 #define AppPublisher "drkai-lab"
-#define AppURL "https://github.com/drkai-lab/vrc-expression-hotkeys"
+#define AppURL "https://github.com/drkai-lab/T1-VREmoKey-Free"
 
 [Setup]
 AppId={{A4C8E2B1-7D19-4F6A-9C33-2E5B8A1D0F47}

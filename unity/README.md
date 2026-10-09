@@ -1,4 +1,4 @@
-# VRChat Expression Hotkeys (Unity)
+# T1-VREmoKey-Free (Unity)
 
 Free edition, version 1.0.0. This package keeps 4 expressions. Name each
 one, render a 256×256 face preview, and export `profile.json` plus
@@ -6,7 +6,7 @@ one, render a 256×256 face preview, and export `profile.json` plus
 assigns Shift+F1..F4. Suggest and export stop at 4. A row whose index is
 above 4 is left out of `profile.json`.
 
-A separate full edition exists for the T1 mini keyboard. That edition
+The full edition, T1-VREmoKey, exists for the T1 mini keyboard. That edition
 supports 12 expressions, the keyboard's own buttons, and the dial. This
 package does not assign hardware buttons and does not write firmware.
 

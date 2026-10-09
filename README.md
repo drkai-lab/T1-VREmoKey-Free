@@ -1,4 +1,6 @@
-# VRChat Expression Hotkeys
+# T1-VREmoKey-Free
+
+VRChat expression hotkeys (free edition of **T1-VREmoKey**).
 
 English | [日本語](README.ja.md)
 
@@ -9,9 +11,11 @@ expression. This edition has four expressions. Each avatar can have its
 own names and preview images. This repository does not talk to keyboard
 hardware and does not write firmware.
 
-A separate full edition exists for the T1 mini keyboard. That edition
-supports 12 expressions, the keyboard's own buttons, and the dial. It is
-not part of this project.
+The full edition, **T1-VREmoKey**, is for the T1 mini keyboard. It supports
+12 expressions, assigning them to the keyboard's own buttons, cycling them
+with the dial, and writing the keyboard's settings. It is a separate project.
+
+The app, files, and commands keep the name `vrc-expression-hotkeys` (Start menu: **VRChat Expression Hotkeys**), so existing settings keep working.
 
 ## What it does
 
@@ -45,7 +49,7 @@ log in again. Keys still reach the desktop.
 
 ## Download
 
-Get the latest files from the [Releases page](https://github.com/drkai-lab/vrc-expression-hotkeys/releases/latest).
+Get the latest files from the [Releases page](https://github.com/drkai-lab/T1-VREmoKey-Free/releases/latest).
 
 | OS | File |
 | --- | --- |
@@ -55,7 +59,7 @@ Get the latest files from the [Releases page](https://github.com/drkai-lab/vrc-e
 
 ## Install on Windows (installer)
 
-1. Download `vrc-expression-hotkeys-<version>-setup.exe` from the [Releases page](https://github.com/drkai-lab/vrc-expression-hotkeys/releases/latest) and run it.
+1. Download `vrc-expression-hotkeys-<version>-setup.exe` from the [Releases page](https://github.com/drkai-lab/T1-VREmoKey-Free/releases/latest) and run it.
 2. The binaries are unsigned, so SmartScreen may warn you. Click **More info**, then **Run anyway**.
 3. Optional tasks during setup (both off by default):
    - **Create a desktop icon**

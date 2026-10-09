@@ -1,4 +1,6 @@
-# VRChat 表情ホットキー
+# T1-VREmoKey-Free
+
+VRChat 表情ホットキー（**T1-VREmoKey** の無料版）。
 
 [English](README.md) | 日本語
 
@@ -6,9 +8,11 @@
 表情は 4 つまでです。アバターごとに名前とプレビュー画像を持てます。この
 リポジトリはキーボードハードウェアと通信せず、ファームウェアも書きません。
 
-T1 ミニキーボード向けの完全版は別のアプリケーションです。あちらは表情 12、
-キーボード本体のボタン、およびダイヤルに対応します。このプロジェクトには
-含まれません。
+T1 ミニキーボード向けの完全版 **T1-VREmoKey** は別のプロジェクトです。
+あちらは表情 12 個、キーボード本体のボタンへの割り当て、ダイヤルでの表情の
+切り替え、キーボードの設定書き込みに対応します。
+
+アプリ本体・ファイル・コマンドの名前は `vrc-expression-hotkeys` のままです（スタートメニューでは **VRChat Expression Hotkeys**）。既存の設定はそのまま使えます。
 
 ## できること
 
@@ -40,7 +44,7 @@ Linux でキーボードが読めないときは、ユーザーを `input` グ�
 
 ## ダウンロード
 
-最新版は [リリースページ](https://github.com/drkai-lab/vrc-expression-hotkeys/releases/latest) から入手できます。
+最新版は [リリースページ](https://github.com/drkai-lab/T1-VREmoKey-Free/releases/latest) から入手できます。
 
 | OS | ファイル |
 | --- | --- |
@@ -50,7 +54,7 @@ Linux でキーボードが読めないときは、ユーザーを `input` グ�
 
 ## Windows へのインストール（インストーラ）
 
-1. [リリースページ](https://github.com/drkai-lab/vrc-expression-hotkeys/releases/latest) から `vrc-expression-hotkeys-<version>-setup.exe` をダウンロードして実行します。
+1. [リリースページ](https://github.com/drkai-lab/T1-VREmoKey-Free/releases/latest) から `vrc-expression-hotkeys-<version>-setup.exe` をダウンロードして実行します。
 2. 署名していないため SmartScreen の警告が出ることがあります。「**詳細情報**」→「**実行**」で続行してください。
 3. セットアップ中に選べる項目（どちらも既定はオフ）:
    - **デスクトップにアイコンを作成**
