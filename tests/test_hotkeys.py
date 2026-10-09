@@ -61,13 +61,28 @@ class ChordTest(unittest.TestCase):
         self.shift = 42
 
     def test_codes(self):
+        self.assertEqual(veh.SLOT_COUNT, 4)
+        self.assertEqual(veh.FKEY_NAMES, ["F1", "F2", "F3", "F4"])
         self.assertEqual(veh.EVDEV_TO_FKEY[59], "F1")
-        self.assertEqual(veh.EVDEV_TO_FKEY[68], "F10")
-        self.assertEqual(veh.EVDEV_TO_FKEY[87], "F11")
-        self.assertEqual(veh.EVDEV_TO_FKEY[88], "F12")
+        self.assertEqual(veh.EVDEV_TO_FKEY[62], "F4")
+        self.assertNotIn(63, veh.EVDEV_TO_FKEY)
+        self.assertNotIn(88, veh.EVDEV_TO_FKEY)
+        self.assertIn(63, veh.IGNORED_EVDEV)
+        self.assertIn(88, veh.IGNORED_EVDEV)
         self.assertEqual(veh.VK_TO_FKEY[0x70], "F1")
-        self.assertEqual(veh.VK_TO_FKEY[0x7B], "F12")
-        self.assertEqual(len(veh.FKEY_NAMES), 12)
+        self.assertEqual(veh.VK_TO_FKEY[0x73], "F4")
+        self.assertNotIn(0x74, veh.VK_TO_FKEY)
+        self.assertIn(0x7B, veh.IGNORED_VK)
+
+    def test_f5_through_f12_are_ignored(self):
+        self.tracker.note_evdev("kbd", self.shift, 1)
+        self.assertEqual(self.tracker.note_evdev("kbd", 63, 1), [])
+        self.assertEqual(self.tracker.note_evdev("kbd", 88, 1), [])
+        self.assertEqual(self.tracker.note_evdev("kbd", 63, 0), [])
+        self.tracker.note_vk("win", 0xA0, False)
+        self.assertEqual(self.tracker.note_vk("win", 0x74, False), [])
+        self.assertEqual(self.tracker.note_vk("win", 0x7B, False), [])
+        self.assertEqual(self.tracker.note_vk("win", 0x73, False), [("F4", True)])
 
     def test_press_and_release(self):
         self.assertEqual(self.tracker.note_evdev("kbd", self.shift, 1), [])
@@ -253,8 +268,10 @@ class ProfileTest(unittest.TestCase):
         settings = veh.default_settings()
         hotkeys = veh.hotkeys_for(settings, self.root)
         self.assertEqual(hotkeys["F1"], "/avatar/parameters/Expression1")
-        self.assertEqual(hotkeys["F12"], "/avatar/parameters/Expression12")
-        self.assertEqual(len(hotkeys), 12)
+        self.assertEqual(hotkeys["F4"], "/avatar/parameters/Expression4")
+        self.assertNotIn("F5", hotkeys)
+        self.assertNotIn("F12", hotkeys)
+        self.assertEqual(len(hotkeys), 4)
 
     def test_reassign_and_missing_thumb(self):
         profile = veh.default_profile()
@@ -304,6 +321,36 @@ class ProfileTest(unittest.TestCase):
         self.assertEqual(loaded["id"], "smile")
         self.assertTrue(os.path.isfile(
             os.path.join(self.root, "avatars", "smile", "thumbs", "1.png")))
+
+    def test_import_ignores_indexes_above_four(self):
+        src = os.path.join(self.root, "wide")
+        os.makedirs(src)
+        profile = veh.default_profile()
+        profile["id"] = "wide"
+        profile["expressions"].append({
+            "index": 12,
+            "name": "Extra",
+            "parameter": "Extra",
+            "osc": "/avatar/parameters/Extra",
+            "type": "bool",
+            "thumb": "",
+        })
+        with open(os.path.join(src, "profile.json"), "w", encoding="utf-8") as handle:
+            json.dump(profile, handle)
+        loaded = veh.import_profile_pack(src, self.root)
+        indexes = [item["index"] for item in loaded["expressions"]]
+        self.assertEqual(indexes, [1, 2, 3, 4])
+        self.assertEqual(loaded["import_skipped"], [12])
+        self.assertIn("Ignored indexes: 12", loaded["import_notice"])
+        self.assertIn("12", veh.import_notice([12], "ja"))
+        with open(
+            os.path.join(self.root, "avatars", "wide", "profile.json"),
+            encoding="utf-8",
+        ) as handle:
+            stored = json.load(handle)
+        self.assertNotIn("import_notice", stored)
+        self.assertEqual([item["index"] for item in stored["expressions"]], [1, 2, 3, 4])
+        self.assertIsNone(veh.expression_slot(12, loaded, self.root))
         bad = os.path.join(self.root, "bad.zip")
         with zipfile.ZipFile(bad, "w") as archive:
             archive.writestr("../outside.json", "{}")

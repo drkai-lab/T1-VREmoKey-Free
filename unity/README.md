@@ -1,11 +1,14 @@
 # VRChat Expression Hotkeys (Unity)
 
-Free edition, version 1.0.0. Name each expression, render a 256×256 face
-preview, and export `profile.json` plus `thumbs/*.png`. The desktop app
-imports that folder (or a zip of it) and assigns Shift+F1..F12.
+Free edition, version 1.0.0. This package keeps 4 expressions. Name each
+one, render a 256×256 face preview, and export `profile.json` plus
+`thumbs/*.png`. The desktop app imports that folder (or a zip of it) and
+assigns Shift+F1..F4. Suggest and export stop at 4. A row whose index is
+above 4 is left out of `profile.json`.
 
-A separate full edition exists for the T1 mini keyboard. This package does
-not assign hardware buttons and does not write firmware.
+A separate full edition exists for the T1 mini keyboard. That edition
+supports 12 expressions, the keyboard's own buttons, and the dial. This
+package does not assign hardware buttons and does not write firmware.
 
 The editor tools use reflection, so a project without the VRChat SDK still
 compiles. Preview rendering needs the avatar open in the scene. It samples
@@ -19,11 +22,12 @@ a temporary copy and does not save the scene.
    - Assign the avatar that is open in the scene. With the SDK installed,
      the blueprint id is read by reflection from a `blueprintId` field.
      Otherwise type an id.
-   - **Suggest from avatar** lists expression parameters and Animator clip names.
+   - **Suggest from avatar** lists the first 4 expression parameters and Animator clip names.
    - Set the parameter and OSC address. **Generate previews** writes 256×256
      PNGs, framed on the head bone.
    - **Export profile folder**. Zip that folder if you want one file.
-3. Import the pack in the desktop app and assign F1..F12.
+3. Import the pack in the desktop app and assign F1..F4. Indexes above 4
+   are ignored, and the desktop app shows a notice.
 
 ## What this package does not include
 

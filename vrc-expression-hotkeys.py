@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Shift+F1..F12 expression hotkeys for VRChat.
+"""Shift+F1..F4 expression hotkeys for VRChat.
 
-Free edition: per-avatar names and thumbnails, a small assignment window,
-and a chord listener. It does not open a device or send a device report.
+Free edition: four expressions, per-avatar names and thumbnails, a small
+assignment window, and a chord listener. It does not open a device or send
+a device report. Shift+F5..F12 are ignored.
 """
 
 from __future__ import annotations
@@ -65,12 +66,17 @@ _EVDEV_F = {
     1: 59, 2: 60, 3: 61, 4: 62, 5: 63, 6: 64,
     7: 65, 8: 66, 9: 67, 10: 68, 11: 87, 12: 88,
 }
-EVDEV_TO_FKEY = {code: f"F{number}" for number, code in _EVDEV_F.items()}
+SLOT_COUNT = 4
+EVDEV_TO_FKEY = {
+    code: f"F{number}" for number, code in _EVDEV_F.items() if number <= SLOT_COUNT}
+IGNORED_EVDEV = frozenset(
+    code for number, code in _EVDEV_F.items() if number > SLOT_COUNT)
 SHIFT_EVDEV = frozenset({42, 54})
 KEY_F1 = 59
-VK_TO_FKEY = {0x6F + number: f"F{number}" for number in range(1, 13)}
+VK_TO_FKEY = {0x6F + number: f"F{number}" for number in range(1, SLOT_COUNT + 1)}
+IGNORED_VK = frozenset(0x6F + number for number in range(SLOT_COUNT + 1, 13))
 SHIFT_VK = frozenset({0x10, 0xA0, 0xA1})
-FKEY_NAMES = [f"F{number}" for number in range(1, 13)]
+FKEY_NAMES = [f"F{number}" for number in range(1, SLOT_COUNT + 1)]
 WH_KEYBOARD_LL = 13
 WM_KEYUP = 0x0101
 WM_SYSKEYUP = 0x0105
@@ -217,7 +223,7 @@ def profile_root(root=None):
 
 def default_profile():
     expressions = []
-    for number in range(1, 13):
+    for number in range(1, SLOT_COUNT + 1):
         parameter = f"Expression{number}"
         expressions.append({
             "index": number,
@@ -249,7 +255,7 @@ def normalize_profile(raw):
             index = int(item.get("index"))
         except (TypeError, ValueError):
             continue
-        if index < 1:
+        if index < 1 or index > SLOT_COUNT:
             continue
         name = str(item.get("name") or f"Expression{index}").strip() or f"Expression{index}"
         parameter = str(item.get("parameter") or name).strip() or name
@@ -349,13 +355,46 @@ def _copy_thumbs(src_dir, profile, root):
     return profile
 
 
+def skipped_expression_indexes(raw):
+    """Indexes the free edition will not keep. Only values above the slot cap."""
+    skipped = []
+    if not isinstance(raw, dict):
+        return skipped
+    for item in raw.get("expressions") or []:
+        if not isinstance(item, dict):
+            continue
+        try:
+            index = int(item.get("index"))
+        except (TypeError, ValueError):
+            continue
+        if index > SLOT_COUNT:
+            skipped.append(index)
+    return skipped
+
+
+def import_notice(skipped, lang="en"):
+    if not skipped:
+        return ""
+    indexes = ", ".join(str(index) for index in skipped)
+    if lang == "ja":
+        return f"無料版は表情 {SLOT_COUNT} つまでです。{indexes} は読み飛ばしました。"
+    return f"Free edition keeps {SLOT_COUNT} expressions. Ignored indexes: {indexes}."
+
+
 def _import_profile_dir(src, root):
     with open(os.path.join(src, "profile.json"), encoding="utf-8") as handle:
         raw = json.load(handle)
+    skipped = skipped_expression_indexes(raw)
     profile = normalize_profile(raw)
     if profile is None:
         raise ValueError("invalid profile.json")
-    return save_profile(_copy_thumbs(src, profile, root), root)
+    saved = save_profile(_copy_thumbs(src, profile, root), root)
+    if skipped:
+        notice = import_notice(skipped)
+        log(notice)
+        saved["import_skipped"] = skipped
+        saved["import_notice"] = notice
+    return saved
 
 
 def import_profile_pack(path, root=None):
@@ -432,7 +471,7 @@ def normalize_assign(raw):
             index = int(value)
         except (TypeError, ValueError):
             index = 0
-        out[name] = index if index >= 1 else 0
+        out[name] = index if 1 <= index <= SLOT_COUNT else 0
     return out
 
 
@@ -442,7 +481,7 @@ def expression_slot(index, profile, root=None):
         index = int(index)
     except (TypeError, ValueError):
         return None
-    if index < 1 or not isinstance(profile, dict):
+    if index < 1 or index > SLOT_COUNT or not isinstance(profile, dict):
         return None
     expr = None
     for item in profile.get("expressions") or []:
@@ -539,6 +578,8 @@ class ChordTracker:
         return any(self._shift.values())
 
     def would_press(self, device, code, value, fkeys):
+        if code in IGNORED_EVDEV or code in IGNORED_VK:
+            return False
         if value != 1:
             return False
         name = fkeys.get(code)
@@ -551,9 +592,13 @@ class ChordTracker:
         return not latched or name not in latched
 
     def note_evdev(self, device, code, value, accept_press=True):
+        if code in IGNORED_EVDEV:
+            return []
         return self._note(device, code, value, SHIFT_EVDEV, EVDEV_TO_FKEY, accept_press)
 
     def note_vk(self, device, vk, is_up, accept_press=True):
+        if vk in IGNORED_VK:
+            return []
         value = 0 if is_up else 1
         return self._note(device, vk, value, SHIFT_VK, VK_TO_FKEY, accept_press)
 
@@ -1305,7 +1350,7 @@ def run_gui():
             self._updating = False
             self._avatar_ids = []
             self._avatar_listener = None
-            root.title("VRChat Expression Hotkeys")
+            root.title(f"VRChat Expression Hotkeys (F1-F{SLOT_COUNT})")
             root.geometry("720x640")
             root.minsize(560, 480)
             self._build()
@@ -1320,7 +1365,7 @@ def run_gui():
         def tr(self, key):
             table = {
                 "en": {
-                    "enable": "Listen for Shift+F1..F12",
+                    "enable": "Listen for Shift+F1..F4",
                     "filter": "Only while VRChat is in front",
                     "avatar": "Avatar",
                     "import": "Import avatar profile",
@@ -1333,7 +1378,7 @@ def run_gui():
                     "last": "Last",
                 },
                 "ja": {
-                    "enable": "Shift+F1..F12 を待つ",
+                    "enable": "Shift+F1..F4 を待つ",
                     "filter": "VRChat が前面のときだけ",
                     "avatar": "アバター",
                     "import": "アバタープロファイルを読み込む",
@@ -1575,7 +1620,9 @@ def run_gui():
             activate_avatar(self.settings, profile["id"])
             save_settings(self.settings)
             self._reload_rows()
-            self.status.configure(text=profile["name"])
+            skipped = profile.get("import_skipped") or []
+            notice = import_notice(skipped, self.lang) if skipped else profile["name"]
+            self.status.configure(text=notice)
 
         def on_pick(self, name):
             if self._updating:
@@ -1647,7 +1694,7 @@ def run_gui():
 def main(argv=None):
     parser = argparse.ArgumentParser(
         prog=APP_NAME,
-        description="Free VRChat expression hotkeys (Shift+F1..F12)")
+        description="Free VRChat expression hotkeys (Shift+F1..F4)")
     parser.add_argument("--version", action="version", version=f"{APP_NAME} {VERSION}")
     parser.add_argument(
         "--listen", action="store_true",

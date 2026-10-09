@@ -29,10 +29,11 @@ namespace VrcExpressionHotkeys.EditorTools
         private void OnGUI()
         {
             EditorGUILayout.HelpBox(
+                "Free edition: 4 expressions (Shift+F1 through F4).\n" +
                 "1. Select the avatar (a VRChat avatar descriptor if the SDK is installed, otherwise any Animator).\n" +
-                "2. Name each expression. Suggest fills parameters and clip names.\n" +
+                "2. Name each expression. Suggest fills the first 4 parameters and clip names.\n" +
                 "3. Generate previews. The avatar must be in the open scene.\n" +
-                "4. Export a profile folder, then import it in VRChat Expression Hotkeys.",
+                "4. Export a profile folder. Indexes above 4 are left out.",
                 MessageType.Info);
 
             _avatar = (GameObject)EditorGUILayout.ObjectField("Avatar", _avatar, typeof(GameObject), true);
@@ -48,7 +49,20 @@ namespace VrcExpressionHotkeys.EditorTools
             if (GUILayout.Button("Suggest from avatar"))
                 Suggest();
             if (GUILayout.Button("Add expression"))
-                _rows.Add(MakeRow(_rows.Count + 1, "Expression" + (_rows.Count + 1)));
+            {
+                if (_rows.Count >= ProfileDocument.SlotCount)
+                {
+                    EditorUtility.DisplayDialog(
+                        "Expression Profile",
+                        "The free edition keeps " + ProfileDocument.SlotCount + " expressions.",
+                        "OK");
+                }
+                else
+                {
+                    int next = _rows.Count + 1;
+                    _rows.Add(MakeRow(next, "Expression" + next));
+                }
+            }
             GUILayout.EndHorizontal();
 
             _scroll = GUILayout.BeginScrollView(_scroll);
@@ -67,7 +81,8 @@ namespace VrcExpressionHotkeys.EditorTools
             var row = _rows[index];
             GUILayout.BeginVertical("box");
             GUILayout.BeginHorizontal();
-            row.index = EditorGUILayout.IntField("Index", row.index);
+            row.index = Mathf.Clamp(
+                EditorGUILayout.IntField("Index", row.index), 1, ProfileDocument.SlotCount);
             if (GUILayout.Button("Remove", GUILayout.Width(70)))
             {
                 _rows.RemoveAt(index);
@@ -156,7 +171,7 @@ namespace VrcExpressionHotkeys.EditorTools
                 }
                 _rows.Add(row);
                 index++;
-                if (index > 48)
+                if (index > ProfileDocument.SlotCount)
                     break;
             }
         }
@@ -236,6 +251,8 @@ namespace VrcExpressionHotkeys.EditorTools
 
     public static class ProfileDocument
     {
+        public const int SlotCount = 4;
+
         public class Row
         {
             public int index = 1;
@@ -253,7 +270,8 @@ namespace VrcExpressionHotkeys.EditorTools
             {
                 foreach (var row in rows)
                 {
-                    if (row == null || row.index < 1 || string.IsNullOrEmpty(row.name))
+                    if (row == null || row.index < 1 || row.index > SlotCount
+                        || string.IsNullOrEmpty(row.name))
                         continue;
                     expressions.Add(
                         "      {\"index\": " + row.index
