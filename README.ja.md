@@ -1,5 +1,7 @@
 # VRChat 表情ホットキー
 
+[English](README.md) | 日本語
+
 無料版です。Shift を押しながら F1 から F4 で VRChat の表情を切り替えます。
 表情は 4 つまでです。アバターごとに名前とプレビュー画像を持てます。この
 リポジトリはキーボードハードウェアと通信せず、ファームウェアも書きません。
@@ -38,18 +40,71 @@ Linux でキーボードが読めないときは、ユーザーを `input` グ�
 
 ## ダウンロード
 
-Windows は、リリースが公開されたあとのインストーラ、またはコンソール版と
-ウィンドウ版の実行ファイルです。
+最新版は [リリースページ](https://github.com/drkai-lab/vrc-expression-hotkeys/releases/latest) から入手できます。
 
-Linux:
+| OS | ファイル |
+| --- | --- |
+| Windows（おすすめ） | `vrc-expression-hotkeys-<version>-setup.exe`（インストーラ） |
+| Windows（インストール不要） | `vrc-expression-hotkeys-gui.exe`（ウィンドウ版）/ `vrc-expression-hotkeys.exe`（コンソール版） |
+| Linux | `vrc-expression-hotkeys-linux-<version>.tar.gz`（と `.sha256`） |
+
+## Windows へのインストール（インストーラ）
+
+1. [リリースページ](https://github.com/drkai-lab/vrc-expression-hotkeys/releases/latest) から `vrc-expression-hotkeys-<version>-setup.exe` をダウンロードして実行します。
+2. 署名していないため SmartScreen の警告が出ることがあります。「**詳細情報**」→「**実行**」で続行してください。
+3. セットアップ中に選べる項目（どちらも既定はオフ）:
+   - **デスクトップにアイコンを作成**
+   - **Start at logon**（ログオン時に起動）: Windows にサインインしたとき自動で起動します。
+4. スタートメニューの **VRChat Expression Hotkeys** から起動します。遊んでいる間はウィンドウを開いたまま（最小化でも可）にしてください。
+5. アンインストールは「**設定 > アプリ > インストールされているアプリ**」か、スタートメニューのアンインストール用ショートカットから行えます。
+
+インストールせずに使う場合は、`vrc-expression-hotkeys-gui.exe` をダウンロードしてそのまま実行します。
+
+## Linux へのインストール
+
+必要なもの: Python 3.9 以上と Tkinter（Arch / Omarchy は `sudo pacman -S tk`、Debian / Ubuntu は `sudo apt install python3-tk`）。
 
 ```bash
-tar xzf vrc-expression-hotkeys-linux-1.0.0.tar.gz
-cd vrc-expression-hotkeys-linux-1.0.0
-python3 vrc-expression-hotkeys.py
+# 1. リリースページから tar.gz と .sha256 をダウンロードし、検証して展開
+sha256sum -c vrc-expression-hotkeys-linux-<version>.tar.gz.sha256
+tar xzf vrc-expression-hotkeys-linux-<version>.tar.gz
+cd vrc-expression-hotkeys-linux-<version>
+
+# 2. PATH の通った場所に配置
+install -Dm755 vrc-expression-hotkeys.py ~/.local/bin/vrc-expression-hotkeys
+
+# 3. キーボードを読めるようにする（実行後にログアウトして入り直す）
+sudo usermod -aG input "$USER"
+
+# 4. 起動
+vrc-expression-hotkeys            # ウィンドウ
+vrc-expression-hotkeys --listen   # ウィンドウなしで待受だけ
 ```
 
-チェックアウトから:
+任意: ログイン時に待受を自動起動する（systemd ユーザーサービス）。
+
+```bash
+mkdir -p ~/.config/systemd/user
+cat > ~/.config/systemd/user/vrc-expression-hotkeys.service <<'EOF'
+[Unit]
+Description=VRChat Expression Hotkeys (Shift+F1..F4)
+
+[Service]
+ExecStart=%h/.local/bin/vrc-expression-hotkeys --listen
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
+EOF
+systemctl --user daemon-reload
+systemctl --user enable --now vrc-expression-hotkeys.service
+```
+
+VRChat が前面かどうかは、Wayland（Hyprland / Omarchy）では `hyprctl`、X11 では `xdotool` か `xprop` で判定します。
+
+アンインストール: `systemctl --user disable --now vrc-expression-hotkeys.service` を実行し、`~/.local/bin/vrc-expression-hotkeys` と `~/.config/systemd/user/vrc-expression-hotkeys.service` を削除します。
+
+## チェックアウトから実行
 
 ```bash
 python3 vrc-expression-hotkeys.py

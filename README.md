@@ -1,5 +1,9 @@
 # VRChat Expression Hotkeys
 
+English | [日本語](README.ja.md)
+
+> 日本語の説明は [README.ja.md](README.ja.md) にあります。
+
 Free edition. Hold Shift and press F1 through F4 to toggle a VRChat
 expression. This edition has four expressions. Each avatar can have its
 own names and preview images. This repository does not talk to keyboard
@@ -41,18 +45,71 @@ log in again. Keys still reach the desktop.
 
 ## Download
 
-Windows: the installer or the two executables (console and windowed) from
-the release assets, once a release is published.
+Get the latest files from the [Releases page](https://github.com/drkai-lab/vrc-expression-hotkeys/releases/latest).
 
-Linux:
+| OS | File |
+| --- | --- |
+| Windows (recommended) | `vrc-expression-hotkeys-<version>-setup.exe` (installer) |
+| Windows (no install) | `vrc-expression-hotkeys-gui.exe` (window) / `vrc-expression-hotkeys.exe` (console) |
+| Linux | `vrc-expression-hotkeys-linux-<version>.tar.gz` (+ `.sha256`) |
+
+## Install on Windows (installer)
+
+1. Download `vrc-expression-hotkeys-<version>-setup.exe` from the [Releases page](https://github.com/drkai-lab/vrc-expression-hotkeys/releases/latest) and run it.
+2. The binaries are unsigned, so SmartScreen may warn you. Click **More info**, then **Run anyway**.
+3. Optional tasks during setup (both off by default):
+   - **Create a desktop icon**
+   - **Start at logon**: starts the app automatically when you sign in to Windows.
+4. Start **VRChat Expression Hotkeys** from the Start menu. Keep the window open (or minimized) while you play.
+5. Uninstall from **Settings > Apps > Installed apps**, or with the Start menu uninstall shortcut.
+
+Without installing, download `vrc-expression-hotkeys-gui.exe` and run it directly.
+
+## Install on Linux
+
+Requirements: Python 3.9+ and Tkinter (`sudo pacman -S tk` on Arch / Omarchy, `sudo apt install python3-tk` on Debian / Ubuntu).
 
 ```bash
-tar xzf vrc-expression-hotkeys-linux-1.0.0.tar.gz
-cd vrc-expression-hotkeys-linux-1.0.0
-python3 vrc-expression-hotkeys.py
+# 1. Download the tarball and its .sha256 from the Releases page, then verify and extract
+sha256sum -c vrc-expression-hotkeys-linux-<version>.tar.gz.sha256
+tar xzf vrc-expression-hotkeys-linux-<version>.tar.gz
+cd vrc-expression-hotkeys-linux-<version>
+
+# 2. Install the script into your PATH
+install -Dm755 vrc-expression-hotkeys.py ~/.local/bin/vrc-expression-hotkeys
+
+# 3. Allow reading keyboards (then log out and back in)
+sudo usermod -aG input "$USER"
+
+# 4. Run
+vrc-expression-hotkeys            # window
+vrc-expression-hotkeys --listen   # listener only, no window
 ```
 
-From a checkout:
+Optional: start the listener automatically at login (systemd user service).
+
+```bash
+mkdir -p ~/.config/systemd/user
+cat > ~/.config/systemd/user/vrc-expression-hotkeys.service <<'EOF'
+[Unit]
+Description=VRChat Expression Hotkeys (Shift+F1..F4)
+
+[Service]
+ExecStart=%h/.local/bin/vrc-expression-hotkeys --listen
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
+EOF
+systemctl --user daemon-reload
+systemctl --user enable --now vrc-expression-hotkeys.service
+```
+
+On Wayland (Hyprland / Omarchy) the VRChat-only filter uses `hyprctl`; on X11 it uses `xdotool` or `xprop`.
+
+Uninstall: `systemctl --user disable --now vrc-expression-hotkeys.service`, then remove `~/.local/bin/vrc-expression-hotkeys` and `~/.config/systemd/user/vrc-expression-hotkeys.service`.
+
+## Run from a checkout
 
 ```bash
 python3 vrc-expression-hotkeys.py
