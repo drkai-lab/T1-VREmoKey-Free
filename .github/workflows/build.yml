@@ -74,7 +74,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: windows-x64
-          path: dist-win/*.exe
+          # The unversioned exe names are the Rust build. This job only
+          # publishes the Python 1.0.0 installer, which has its own filename.
+          path: dist-win/vrc-expression-hotkeys-1.0.0-setup.exe
           if-no-files-found: error
 
   rust:
@@ -180,6 +182,31 @@ jobs:
         run: choco install innosetup -y
       - name: Build installer
         run: iscc rust/packaging/installer.iss
+      - name: Stage Rust exes and reject a Python build
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $cargo = Get-Content rust\Cargo.toml -Raw
+          if ($cargo -notmatch '(?m)^version = "([^"]+)"') { throw "Cargo.toml has no version" }
+          $expected = $Matches[1]
+          New-Item -ItemType Directory -Force -Path dist-win-rust | Out-Null
+          foreach ($name in @("vrc-expression-hotkeys.exe", "vrc-expression-hotkeys-gui.exe")) {
+            $exe = Join-Path "rust\target\release" $name
+            $text = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($exe))
+            if ($text.Contains("PyInstaller") -or $text.Contains("tkinter")) {
+              throw "$name is the Python/Tkinter build"
+            }
+            if (-not $text.Contains("T1-VREmoKey-Free")) {
+              throw "$name is not the Rust build"
+            }
+            Copy-Item $exe dist-win-rust
+          }
+          $version = (& "rust\target\release\vrc-expression-hotkeys-gui.exe" --version | Out-String).Trim()
+          if ($version -notmatch [regex]::Escape($expected)) { throw "GUI version is '$version', expected $expected" }
+          $setup = "dist-win-rust\vrc-expression-hotkeys-$expected-setup.exe"
+          $header = [Text.Encoding]::Unicode.GetString([IO.File]::ReadAllBytes($setup))
+          if (-not $header.Contains("T1-VREmoKey-Free")) { throw "installer header is not the Rust product" }
+          if ($header.Contains("VRChat Expression Hotkeys")) { throw "installer header is the Python product" }
       - uses: actions/upload-artifact@v4
         with:
           name: rust-windows-x64
@@ -210,7 +237,65 @@ jobs:
         with:
           path: out
           merge-multiple: true
+      - name: Require the Rust Windows build
+        run: |
+          python3 - << 'PY'
+          import pathlib
+          import re
+          import sys
+
+          cargo = pathlib.Path("rust/Cargo.toml").read_text()
+          version = re.search(r'(?m)^version = "([^"]+)"', cargo).group(1)
+          root = pathlib.Path("out")
+
+          def require(path: pathlib.Path) -> bytes:
+              if not path.is_file():
+                  sys.exit(f"missing {path}")
+              return path.read_bytes()
+
+          for name in ("vrc-expression-hotkeys.exe", "vrc-expression-hotkeys-gui.exe"):
+              data = require(root / name)
+              if b"PyInstaller" in data or b"tkinter" in data:
+                  sys.exit(f"{name} is the Python/Tkinter build")
+              if b"T1-VREmoKey-Free" not in data:
+                  sys.exit(f"{name} is not the Rust build")
+
+          setup = require(root / f"vrc-expression-hotkeys-{version}-setup.exe")
+          header = setup.decode("utf-16le", errors="ignore")
+          if "T1-VREmoKey-Free" not in header:
+              sys.exit("Rust installer header is missing")
+          if "VRChat Expression Hotkeys" in header:
+              sys.exit("Rust installer header is the Python product name")
+
+          for name in (
+              "vrc-expression-hotkeys-1.0.0-setup.exe",
+              f"vrc-expression-hotkeys-linux-{version}.tar.gz",
+              f"vrc-expression-hotkeys-linux-{version}.tar.gz.sha256",
+              "vrc-expression-hotkeys-linux-1.0.0.tar.gz",
+              "vrc-expression-hotkeys-linux-1.0.0.tar.gz.sha256",
+              f"vrc-expression-hotkeys_{version}-1_amd64.deb",
+              f"vrc-expression-hotkeys-{version}-1-x86_64.pkg.tar.zst",
+              f"com.drkai-lab.vrc-expression-hotkeys-{version}.tgz",
+              f"com.drkai-lab.vrc-expression-hotkeys-{version}.unitypackage",
+          ):
+              require(root / name)
+          print(f"release files for {version} are the Rust Windows build")
+          PY
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${GITHUB_REF_NAME}" --generate-notes out/*
+        run: |
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' rust/Cargo.toml | head -n 1)"
+          gh release create "${GITHUB_REF_NAME}" --generate-notes \
+            "out/vrc-expression-hotkeys.exe" \
+            "out/vrc-expression-hotkeys-gui.exe" \
+            "out/vrc-expression-hotkeys-1.0.0-setup.exe" \
+            "out/vrc-expression-hotkeys-${version}-setup.exe" \
+            "out/vrc-expression-hotkeys-linux-1.0.0.tar.gz" \
+            "out/vrc-expression-hotkeys-linux-1.0.0.tar.gz.sha256" \
+            "out/vrc-expression-hotkeys-linux-${version}.tar.gz" \
+            "out/vrc-expression-hotkeys-linux-${version}.tar.gz.sha256" \
+            "out/vrc-expression-hotkeys_${version}-1_amd64.deb" \
+            "out/vrc-expression-hotkeys-${version}-1-x86_64.pkg.tar.zst" \
+            "out/com.drkai-lab.vrc-expression-hotkeys-${version}.tgz" \
+            "out/com.drkai-lab.vrc-expression-hotkeys-${version}.unitypackage"
