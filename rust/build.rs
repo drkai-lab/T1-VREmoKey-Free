@@ -11,8 +11,8 @@ fn main() {
             }
         }
         res.set_icon("assets/app.ico");
-        res.set("FileVersion", "2.0.0.0");
-        res.set("ProductVersion", "2.0.0.0");
+        res.set("FileVersion", "2.0.1.0");
+        res.set("ProductVersion", "2.0.1.0");
         res.set("ProductName", "T1-VREmoKey-Free");
         res.set("FileDescription", "VRChat expression hotkeys");
         res.set("CompanyName", "drkai-lab");

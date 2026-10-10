@@ -1,6 +1,6 @@
 [package]
 name = "vrc-expression-hotkeys"
-version = "2.0.0"
+version = "2.0.1"
 edition = "2021"
 license = "MIT"
 authors = ["drkai-lab"]
@@ -89,5 +89,6 @@ assets = [
     ["assets/app-256.png", "usr/share/icons/hicolor/256x256/apps/vrc-expression-hotkeys.png", "644"],
     ["assets/app-512.png", "usr/share/icons/hicolor/512x512/apps/vrc-expression-hotkeys.png", "644"],
     ["../LICENSE", "usr/share/licenses/vrc-expression-hotkeys/LICENSE", "644"],
+    ["assets/OFL", "usr/share/licenses/vrc-expression-hotkeys/OFL", "644"],
 ]
 maintainer-scripts = "packaging/deb"

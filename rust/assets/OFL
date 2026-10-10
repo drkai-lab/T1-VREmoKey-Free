@@ -1,8 +1,10 @@
-Noto Sans CJK (subset)
-Copyright 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name 'Noto'.
+Noto Sans JP
+Copyright 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source'.
 
-This application embeds a subset of Noto Sans CJK JP for the user interface.
-The subset is Font Software under the SIL Open Font License, Version 1.1.
+This application embeds Noto Sans JP Regular so the window can draw Japanese
+without a system font such as Meiryo, Yu Gothic, MS Gothic, or Hiragino.
+Noto Sans JP is Font Software under the SIL Open Font License, Version 1.1.
+https://fonts.google.com/noto/specimen/Noto+Sans+JP
 
 -----------------------------------------------------------
 SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007

@@ -15,7 +15,7 @@ The full edition, **T1-VREmoKey**, is for the T1 mini keyboard. It supports
 12 expressions, assigning them to the keyboard's own buttons, cycling them
 with the dial, and writing the keyboard's settings. It is a separate project.
 
-The command name stays `vrc-expression-hotkeys`, and settings stay in the same directories, so an existing setup keeps working. Version 2.0.0 is the Rust app. Its window title and tray name are **T1-VREmoKey-Free**. Release builds strip symbols and use link-time optimization. This public build is not obfuscated.
+The command name stays `vrc-expression-hotkeys`, and settings stay in the same directories, so an existing setup keeps working. Version 2.0.1 is the Rust app. Its window title and tray name are **T1-VREmoKey-Free**. Release builds strip symbols and use link-time optimization. This public build is not obfuscated.
 
 ## What it does
 
@@ -165,3 +165,5 @@ To pin a version, append `#v2.0.0`:
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+The window draws Japanese with embedded [Noto Sans JP](https://fonts.google.com/noto/specimen/Noto+Sans+JP) Regular (SIL Open Font License 1.1). The notice is [rust/assets/OFL](rust/assets/OFL), and installers copy it next to the program. The tray menu and the file dialog are native controls: on Windows their text is UTF-16, and they use the system UI font.

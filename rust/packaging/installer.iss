@@ -1,7 +1,7 @@
 ; Inno Setup script for the Rust free edition (Windows x64)
 
 #define AppName "T1-VREmoKey-Free"
-#define AppVersion "2.0.0"
+#define AppVersion "2.0.1"
 #define AppPublisher "drkai-lab"
 #define AppURL "https://github.com/drkai-lab/T1-VREmoKey-Free"
 
@@ -35,6 +35,7 @@ Name: "autostart"; Description: "Start at logon"; GroupDescription: "Autostart";
 [Files]
 Source: "..\target\release\vrc-expression-hotkeys.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\target\release\vrc-expression-hotkeys-gui.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\assets\OFL"; DestDir: "{app}"; DestName: "OFL.txt"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\vrc-expression-hotkeys-gui.exe"
