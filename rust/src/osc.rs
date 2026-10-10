@@ -132,10 +132,11 @@ fn as_port(value: &Value) -> Option<u16> {
     u16::try_from(number).ok().filter(|port| *port != 0)
 }
 
-/// Pad with zeros up to a multiple of 4. A length that is already a
-/// multiple of 4 is left unchanged, matching the Python encoder.
+/// OSC 1.0 string: the bytes, a terminating NUL, then NUL bytes up to the
+/// next 4-byte boundary. A length that is already a multiple of 4 still
+/// needs four NUL bytes (the terminator occupies a whole padding word).
 fn pad(raw: &[u8]) -> Vec<u8> {
-    let extra = (4 - (raw.len() % 4)) % 4;
+    let extra = 4 - (raw.len() % 4);
     let mut out = raw.to_vec();
     out.extend(std::iter::repeat_n(0, extra));
     out
@@ -178,6 +179,44 @@ mod tests {
         let (address, value) = parse_osc_packet(&packet).unwrap();
         assert_eq!(address, "/avatar/change");
         assert_eq!(value, OscTyped::String("avtr_smile".into()));
+    }
+
+    #[test]
+    fn aligned_address_and_type_tags_are_nul_terminated() {
+        let address = "/avatar/parameters/GrinA";
+        assert_eq!(address.len(), 24);
+        assert_eq!(address.len() % 4, 0);
+
+        let down = OscSender::packet(address, true);
+        let up = OscSender::packet(address, false);
+        assert_eq!(&down[..24], address.as_bytes());
+        assert_eq!(&down[24..28], &[0, 0, 0, 0]);
+        assert_eq!(&down[28..32], b",T\0\0");
+        assert_eq!(down[32], 0x01);
+        assert_eq!(&up[..28], &down[..28]);
+        assert_eq!(&up[28..32], b",F\0\0");
+        assert_eq!(up[32], 0x00);
+
+        let (got, value) = parse_osc_packet(&down).unwrap();
+        assert_eq!(got, address);
+        assert_eq!(value, OscTyped::Bool(true));
+        let (got, value) = parse_osc_packet(&up).unwrap();
+        assert_eq!(got, address);
+        assert_eq!(value, OscTyped::Bool(false));
+
+        let ordinary = OscSender::packet("/avatar/parameters/Expression1", true);
+        assert_eq!(&ordinary[ordinary.len() - 5..], b",T\0\0\x01");
+        let ordinary_up = OscSender::packet("/avatar/parameters/Expression1", false);
+        assert_eq!(&ordinary_up[ordinary_up.len() - 5..], b",F\0\0\x00");
+
+        let text = encode_osc_string("/avatar/change", "abcd");
+        let at = text.windows(4).position(|part| part == b"abcd").unwrap();
+        assert_eq!(&text[at..at + 8], b"abcd\0\0\0\0");
+        let tags = text.windows(4).position(|part| part == b",s\0\0").unwrap();
+        assert!(tags < at);
+        let (got, value) = parse_osc_packet(&text).unwrap();
+        assert_eq!(got, "/avatar/change");
+        assert_eq!(value, OscTyped::String("abcd".into()));
     }
 
     fn hex(text: &str) -> Vec<u8> {

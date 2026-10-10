@@ -58,3 +58,8 @@ mod linux;
 #[cfg(windows)]
 #[path = "keys_windows.rs"]
 mod windows;
+
+#[cfg(all(windows, any(test, feature = "emulate")))]
+pub fn low_level_hook_ready() -> Option<bool> {
+    windows::hook_status()
+}

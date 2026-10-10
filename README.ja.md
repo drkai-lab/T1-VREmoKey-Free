@@ -8,7 +8,7 @@ VRChat 表情ホットキー（T1-VREmoKey の無料版）。
 
 完全版の T1-VREmoKey は、T1 ミニキーボード向けの別プロジェクトです。完全版は 12 個の表情、キーボード本体のボタンへの割り当て、ダイヤルでの表情の切り替え、キーボードへの設定の書き込みに対応しています。
 
-コマンド名は `vrc-expression-hotkeys` のまま、設定の保存場所も変わりません。今までの設定をそのまま使えます。バージョン 2.0.1 は Rust 版で、ウィンドウとトレイに出る名前は **T1-VREmoKey-Free** です。リリースビルドはシンボルを削り、リンク時最適化を掛けています。難読化したビルドではありません。
+コマンド名は `vrc-expression-hotkeys` のまま、設定の保存場所も変わりません。今までの設定をそのまま使えます。バージョン 2.0.2 は Rust 版で、ウィンドウとトレイに出る名前は **T1-VREmoKey-Free** です。リリースビルドはシンボルを削り、リンク時最適化を掛けています。難読化したビルドではありません。
 
 ## できること
 
@@ -41,6 +41,8 @@ Linux でキーボードが読めないときは、ユーザーを `input` グ�
 | Arch | `vrc-expression-hotkeys-<version>-1-x86_64.pkg.tar.zst` |
 | Linux（tar アーカイブ） | `vrc-expression-hotkeys-linux-<version>.tar.gz`（と `.sha256`） |
 | Unity | `com.drkai-lab.vrc-expression-hotkeys-<version>.tgz` |
+
+Windows の実行ファイルは Visual C++ 再頒布可能パッケージなしで動きます。
 
 ## Windows へのインストール（インストーラ）
 
@@ -104,6 +106,48 @@ python3 vrc-expression-hotkeys.py --listen
 
 設定はアプリの設定ディレクトリにあります（Linux は `~/.config/vrc-expression-hotkeys`、Windows は `%APPDATA%\vrc-expression-hotkeys`）。プロファイルは、その中にある `avatars/<id>/profile.json` と `thumbs/*.png` です。
 
+## 実機なしの通しテスト
+
+無料版はキーボード本体と通信しません。T1 のボタンは、ここでは Shift+F1 から Shift+F4 を押して離すキーとしてだけ扱います。テスト用ビルドは、そのキーをアプリのキーフックの下に差し込めます。Linux では evdev の `poll`、Windows では低レベルキーボードフックの `poll` が、本物のキーと同じ形に変えます。偽の VRChat は OSC の bool を記録し、`/avatar/change` を送れます。
+
+この差し込みは配布物に入りません。`cargo build --release` と各パッケージは `--features emulate` を付けません。公開バイナリに `--emulate` は無く、注入用のキューもありません。
+
+```bash
+cd rust
+cargo test --lib walkthrough_configure_confirm_use_and_switch_avatar
+cargo run --features emulate --bin vrc-expression-hotkeys -- --emulate
+```
+
+`cargo test` だけでも、ライブラリテストの一つとして同じ通しが走ります。`--emulate` はコンソール版の中で同じ通しを実行し、全部通ると終了コード 0 で終わります。
+
+Windows 向けに feature を付けてビルドした exe は、Wine でも同じコマンドで走ります。
+
+```bash
+cargo build --target x86_64-pc-windows-gnu --features emulate --bin vrc-expression-hotkeys
+wine target/x86_64-pc-windows-gnu/debug/vrc-expression-hotkeys.exe --emulate
+```
+
+通しの中身は次のとおりです。
+
+1. 本番のプロファイル取り込みで、表情の違うアバターを 2 つ読み、`settings.json` を書きます。
+2. 保存結果を読み直し、F1 が最初のアバターのパラメータになることを確認します。
+3. 偽 T1 が Shift+F1 を押して離します。偽 VRChat は true のあと false を記録します。F1 のアドレスは `/avatar/parameters/GrinA`（24 バイト）です。通しは、このパケットがアドレスのあとに NUL を 4 バイト足し、型タグ `,T` も 4 バイト境界まで NUL で埋めていることを確認します。
+4. フォーカスの差し替えを「前面ではない」にして同じコードを送り、OSC が出ないことを確認します。
+5. 差し替えを外し、本番の前面判定を使います。コードを送るのは、その判定が VRChat を前面と見たときだけです。画面の無い環境では前面ウィンドウの名前が取れないことが多く、`when_unknown` は `deny` のままなので、そのコードは送られません。
+6. 偽 VRChat が `/avatar/change` で 2 体目へ切り替えます。保存されたアバターを確認したあと、Shift+F1 は 2 体目のパラメータになります。
+
+通しのあいだ、`127.0.0.1` の注入ポートが `press N` と `release N`（N は 1 から 4）、それに `focus on` / `focus off` / `focus live` を受け付けます。最後のコードは、フックのスレッドの外からこのポート経由で送ります。
+
+限界:
+
+- 偽 T1 はデバイスノードを作りません。注入イベントは `/dev/input` も、物理的な `WH_KEYBOARD_LL` のパケットも通りません。Wine では実キーの低レベルフックが届かないことが多いです。このコマンドはその配送を証明しません。レポートの `hook: low-level installed` または `hook: low-level unavailable` が、`SetWindowsHookExW` の成否です。
+- 通しのあいだ、フックは物理キーボードを読みません。そのマシンでの打鍵が結果を変えないようにするためです。実キーがフックに届くことは見ません。
+- 対象は Shift+F1..F4 の押下と解放で、一度に一つのコードです。F5..F12、ダイヤル、ハードウェアのレポートは範囲外です。F5 を混ぜても OSC が出ないことだけ確認します。
+- 偽 VRChat が記録するのは OSC bool で、送れるのは `/avatar/change` の文字列です。アバターのロード、アニメータ、bool 以外のパラメータは見ません。
+- フォーカスの差し替え口は、このテスト用ビルドにだけあります。外したときは Windows の前面プロセス判定か、Linux の `hyprctl` / `xdotool` / `xprop` が走ります。この段階が通るのは、本番の判定が走り、ゲートがその結果に従ったときです。
+- ウィンドウ、トレイ、Unity からの書き出しは、このコマンドでは操作しません。
+- `--emulate` は一時ディレクトリだけを使います。`~/.config/vrc-expression-hotkeys` と `%APPDATA%\vrc-expression-hotkeys` は読み書きしません。
+
 ## 手動チェックリスト
 
 - [ ] Unity からプロファイルを書き出し、このアプリで読み込む。F1..F4 に名前とサムネイルが出る。
@@ -136,9 +180,9 @@ Git がインストールされている必要があります。
 4. `https://github.com/drkai-lab/T1-VREmoKey-Free.git?path=unity` を入力します。
 5. **Add** をクリックします。
 
-版を固定したいときは、末尾に `#v2.0.0` を足します。
+版を固定したいときは、末尾に `#v2.0.2` を足します。
 
-`https://github.com/drkai-lab/T1-VREmoKey-Free.git?path=unity#v2.0.0`
+`https://github.com/drkai-lab/T1-VREmoKey-Free.git?path=unity#v2.0.2`
 
 ## ライセンス
 

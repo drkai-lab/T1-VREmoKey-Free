@@ -1,6 +1,6 @@
 # T1-VREmoKey-Free (Unity)
 
-Free edition, version 2.0.0. This package keeps 4 expressions. Name each
+Free edition, version 2.0.2. This package keeps 4 expressions. Name each
 one, render a 256×256 face preview, and export `profile.json` plus
 `thumbs/*.png`. The desktop app imports that folder (or a zip of it) and
 assigns Shift+F1..F4. Suggest and export stop at 4. A row whose index is
@@ -34,9 +34,9 @@ Git has to be installed.
 4. Enter `https://github.com/drkai-lab/T1-VREmoKey-Free.git?path=unity`.
 5. Click **Add**.
 
-To pin a version, append `#v2.0.0`:
+To pin a version, append `#v2.0.2`:
 
-`https://github.com/drkai-lab/T1-VREmoKey-Free.git?path=unity#v2.0.0`
+`https://github.com/drkai-lab/T1-VREmoKey-Free.git?path=unity#v2.0.2`
 
 You can also copy this `unity/` folder into the project's `Packages` folder.
 

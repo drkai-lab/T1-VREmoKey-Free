@@ -134,7 +134,9 @@ def save_settings(settings):
 
 
 def _pad(raw):
-    return raw + b"\x00" * ((4 - (len(raw) % 4)) % 4)
+    # OSC 1.0: NUL-terminate, then fill to a 4-byte boundary. A length that
+    # is already a multiple of 4 still needs four NUL bytes.
+    return raw + b"\x00" * (4 - (len(raw) % 4))
 
 
 class OscSender:

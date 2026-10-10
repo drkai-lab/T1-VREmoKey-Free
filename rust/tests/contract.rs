@@ -37,6 +37,34 @@ fn hook_and_focus_sources_are_the_passthrough_ones() {
     assert!(combined.contains(&product));
 }
 
+#[test]
+fn emulate_injection_stays_behind_the_feature() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let toml = fs::read_to_string(root.join("Cargo.toml")).unwrap();
+    let features = toml
+        .split("[features]")
+        .nth(1)
+        .expect("features table")
+        .split("\n[")
+        .next()
+        .unwrap();
+    assert!(features.contains("emulate = []"));
+    assert!(!features.contains("default"));
+    for relative in [
+        "src/lib.rs",
+        "src/cli.rs",
+        "src/focus.rs",
+        "src/keys_linux.rs",
+        "src/keys_windows.rs",
+    ] {
+        let text = fs::read_to_string(root.join(relative)).unwrap();
+        assert!(
+            text.contains("feature = \"emulate\""),
+            "{relative} does not gate the stand-in"
+        );
+    }
+}
+
 fn read_tree(root: &Path) -> String {
     let mut out = String::new();
     let mut stack = vec![root.to_path_buf()];
