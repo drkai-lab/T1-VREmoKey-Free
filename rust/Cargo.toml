@@ -1,0 +1,93 @@
+[package]
+name = "vrc-expression-hotkeys"
+version = "2.0.0"
+edition = "2021"
+license = "MIT"
+authors = ["drkai-lab"]
+description = "Free VRChat expression hotkeys (Shift+F1 through F4)"
+repository = "https://github.com/drkai-lab/T1-VREmoKey-Free"
+publish = false
+rust-version = "1.95"
+
+[lib]
+name = "vrc_expression_hotkeys"
+path = "src/lib.rs"
+
+[[bin]]
+name = "vrc-expression-hotkeys"
+path = "src/bin/vrc-expression-hotkeys.rs"
+
+[[bin]]
+name = "vrc-expression-hotkeys-gui"
+path = "src/bin/vrc-expression-hotkeys-gui.rs"
+
+[dependencies]
+chrono = "0.4"
+clap = { version = "4", features = ["derive"] }
+ctrlc = "3"
+eframe = { version = "0.36", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
+glow = "0.17"
+image = { version = "0.25", default-features = false, features = ["png"] }
+rfd = "0.17"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+tempfile = "3"
+tray-icon = { version = "0.26", default-features = false, features = ["ksni"] }
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+evdev = "0.13"
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Threading",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[build-dependencies]
+winres = "0.1"
+
+[dev-dependencies]
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+debug = false
+debug-assertions = false
+overflow-checks = false
+incremental = false
+
+[package.metadata.deb]
+name = "vrc-expression-hotkeys"
+maintainer = "drkai-lab <drkai-lab@users.noreply.github.com>"
+copyright = "2026, drkai-lab"
+license-file = ["../LICENSE", "0"]
+section = "utils"
+priority = "optional"
+extended-description = """\
+Hold Shift and press F1 through F4 to send a VRChat expression. \
+Four expressions, per-avatar names and thumbnails. \
+This package does not talk to keyboard hardware."""
+assets = [
+    ["target/release/vrc-expression-hotkeys", "usr/bin/", "755"],
+    ["target/release/vrc-expression-hotkeys-gui", "usr/bin/", "755"],
+    ["packaging/vrc-expression-hotkeys.desktop", "usr/share/applications/vrc-expression-hotkeys.desktop", "644"],
+    ["packaging/vrc-expression-hotkeys.service", "usr/lib/systemd/user/vrc-expression-hotkeys.service", "644"],
+    ["packaging/99-vrc-expression-hotkeys.rules", "usr/lib/udev/rules.d/99-vrc-expression-hotkeys.rules", "644"],
+    ["assets/app-16.png", "usr/share/icons/hicolor/16x16/apps/vrc-expression-hotkeys.png", "644"],
+    ["assets/app-32.png", "usr/share/icons/hicolor/32x32/apps/vrc-expression-hotkeys.png", "644"],
+    ["assets/app-48.png", "usr/share/icons/hicolor/48x48/apps/vrc-expression-hotkeys.png", "644"],
+    ["assets/app-64.png", "usr/share/icons/hicolor/64x64/apps/vrc-expression-hotkeys.png", "644"],
+    ["assets/app-128.png", "usr/share/icons/hicolor/128x128/apps/vrc-expression-hotkeys.png", "644"],
+    ["assets/app-256.png", "usr/share/icons/hicolor/256x256/apps/vrc-expression-hotkeys.png", "644"],
+    ["assets/app-512.png", "usr/share/icons/hicolor/512x512/apps/vrc-expression-hotkeys.png", "644"],
+    ["../LICENSE", "usr/share/licenses/vrc-expression-hotkeys/LICENSE", "644"],
+]
+maintainer-scripts = "packaging/deb"

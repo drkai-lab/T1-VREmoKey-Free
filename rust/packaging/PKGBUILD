@@ -1,0 +1,22 @@
+# Source package for the free edition. Build the release binaries first
+# (`cargo build --release` in rust/), then run makepkg from this directory
+# with the binaries already in ../target/release.
+pkgname=vrc-expression-hotkeys
+pkgver=2.0.0
+pkgrel=1
+pkgdesc='Free VRChat expression hotkeys (Shift+F1 through F4)'
+arch=('x86_64')
+url='https://github.com/drkai-lab/T1-VREmoKey-Free'
+license=('MIT')
+depends=()
+options=('!strip')
+
+package() {
+    install -Dm755 ../target/release/vrc-expression-hotkeys "$pkgdir/usr/bin/vrc-expression-hotkeys"
+    install -Dm755 ../target/release/vrc-expression-hotkeys-gui "$pkgdir/usr/bin/vrc-expression-hotkeys-gui"
+    install -Dm644 vrc-expression-hotkeys.desktop "$pkgdir/usr/share/applications/vrc-expression-hotkeys.desktop"
+    install -Dm644 vrc-expression-hotkeys.service "$pkgdir/usr/lib/systemd/user/vrc-expression-hotkeys.service"
+    install -Dm644 99-vrc-expression-hotkeys.rules "$pkgdir/usr/lib/udev/rules.d/99-vrc-expression-hotkeys.rules"
+    install -Dm644 ../assets/app-64.png "$pkgdir/usr/share/icons/hicolor/64x64/apps/vrc-expression-hotkeys.png"
+    install -Dm644 ../../LICENSE "$pkgdir/usr/share/licenses/vrc-expression-hotkeys/LICENSE"
+}

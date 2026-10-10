@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=T1-VREmoKey-Free
+GenericName=VRChat Expression Hotkeys
+Comment=Hold Shift and press F1 through F4 to send a VRChat expression
+Exec=vrc-expression-hotkeys-gui
+Icon=vrc-expression-hotkeys
+Terminal=false
+Categories=Utility;
+StartupWMClass=vrc-expression-hotkeys
