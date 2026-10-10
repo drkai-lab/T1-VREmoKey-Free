@@ -2,6 +2,8 @@ __pycache__/
 *.pyc
 dist/
 dist-win/
+dist-win-rust/
 build/
+rust/target/
 .ruff_cache/
 .writeok

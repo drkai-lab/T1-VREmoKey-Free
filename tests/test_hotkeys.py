@@ -41,6 +41,22 @@ BANNED = (
     _chars(116, 49, 45, 107, 101, 121, 98, 111, 97, 114, 100),
 )
 
+_PRODUCT = _chars(84, 49)
+_PRODUCT_LOWER = _chars(116, 49)
+_DEVICE_RULES = _chars(117, 100, 101, 118)
+
+
+def _needle_allowed(needle, relpath):
+    """The public name and the input-group rule live in packaging and Unity metadata."""
+    norm = relpath.replace("\\", "/")
+    rules = needle == _DEVICE_RULES and (
+        norm == "rust/Cargo.toml" or norm.startswith("rust/packaging/")
+    )
+    named = needle in {_PRODUCT, _PRODUCT_LOWER} and norm.startswith(
+        ("unity/", "rust/", "windows/")
+    )
+    return rules or named
+
 
 def _png(path):
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -493,7 +509,7 @@ class SourceContractTest(unittest.TestCase):
 
     def test_code_has_no_device_tokens(self):
         scanned = []
-        skip_dirs = {".git", "__pycache__", ".ruff_cache", "dist", "dist-win", "build"}
+        skip_dirs = {".git", "__pycache__", ".ruff_cache", "dist", "dist-win", "build", "target"}
         for dirpath, dirnames, filenames in os.walk(ROOT):
             dirnames[:] = [name for name in dirnames if name not in skip_dirs]
             for filename in filenames:
@@ -508,8 +524,11 @@ class SourceContractTest(unittest.TestCase):
                     continue
                 with open(path, encoding="utf-8", errors="replace") as handle:
                     text = handle.read()
-                scanned.append(os.path.relpath(path, ROOT))
+                relpath = os.path.relpath(path, ROOT)
+                scanned.append(relpath)
                 for needle in BANNED:
+                    if _needle_allowed(needle, relpath):
+                        continue
                     self.assertNotIn(needle, text, f"{needle!r} in {path}")
         self.assertIn("vrc-expression-hotkeys.py", scanned)
         self.assertIn(os.path.join("unity", "package.json"), scanned)

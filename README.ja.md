@@ -8,7 +8,7 @@ VRChat 表情ホットキー（T1-VREmoKey の無料版）。
 
 完全版の T1-VREmoKey は、T1 ミニキーボード向けの別プロジェクトです。完全版は 12 個の表情、キーボード本体のボタンへの割り当て、ダイヤルでの表情の切り替え、キーボードへの設定の書き込みに対応しています。
 
-アプリ本体・ファイル・コマンドの名前は `vrc-expression-hotkeys` のままです（スタートメニューでは VRChat Expression Hotkeys）。既存の設定はそのまま使えます。
+コマンド名は `vrc-expression-hotkeys` のまま、設定の保存場所も変わりません。今までの設定をそのまま使えます。バージョン 2.0.0 は Rust 版で、ウィンドウとトレイに出る名前は **T1-VREmoKey-Free** です。リリースビルドはシンボルを削り、リンク時最適化を掛けています。難読化したビルドではありません。
 
 ## できること
 
@@ -27,6 +27,8 @@ VRChat 表情ホットキー（T1-VREmoKey の無料版）。
 
 Linux でキーボードが読めないときは、ユーザーを `input` グループに入れてログインし直してください。キー入力はそのままデスクトップに届きます。
 
+ウィンドウを閉じてもアプリはシステムトレイに残ります。メニューは「画面を開く」「待受の開始」「待受の停止」「終了」です。表示言語が英語のときは Open window、Start listening、Stop listening、Quit になります。アプリを終えるのは「終了」です。
+
 ## ダウンロード
 
 最新版は [リリースページ](https://github.com/drkai-lab/T1-VREmoKey-Free/releases/latest) から入手できます。
@@ -35,7 +37,10 @@ Linux でキーボードが読めないときは、ユーザーを `input` グ�
 | --- | --- |
 | Windows（おすすめ） | `vrc-expression-hotkeys-<version>-setup.exe`（インストーラ） |
 | Windows（インストール不要） | `vrc-expression-hotkeys-gui.exe`（ウィンドウ版）/ `vrc-expression-hotkeys.exe`（コンソール版） |
-| Linux | `vrc-expression-hotkeys-linux-<version>.tar.gz`（と `.sha256`） |
+| Debian / Ubuntu | `vrc-expression-hotkeys_<version>-1_amd64.deb` |
+| Arch | `vrc-expression-hotkeys-<version>-1-x86_64.pkg.tar.zst` |
+| Linux（tar アーカイブ） | `vrc-expression-hotkeys-linux-<version>.tar.gz`（と `.sha256`） |
+| Unity | `com.drkai-lab.vrc-expression-hotkeys-<version>.tgz` |
 
 ## Windows へのインストール（インストーラ）
 
@@ -44,56 +49,53 @@ Linux でキーボードが読めないときは、ユーザーを `input` グ�
 3. セットアップ中に次の項目を選べます（どちらも既定はオフです）。
    - **デスクトップにアイコンを作成**
    - **Start at logon**（ログオン時に起動）: Windows にサインインしたとき自動で起動します。
-4. スタートメニューの **VRChat Expression Hotkeys** から起動します。遊んでいる間はウィンドウを開いたまま（最小化でも可）にしてください。
+4. スタートメニューの **T1-VREmoKey-Free** から起動します。ウィンドウは閉じてもトレイに残ります。終了するときはメニューの「終了」を選びます。
 5. アンインストールは「**設定 > アプリ > インストールされているアプリ**」か、スタートメニューのアンインストール用ショートカットから行えます。
 
 インストールせずに使う場合は、`vrc-expression-hotkeys-gui.exe` をダウンロードしてそのまま実行します。
 
 ## Linux へのインストール
 
-必要なもの: Python 3.9 以上と Tkinter（Arch / Omarchy は `sudo pacman -S tk`、Debian / Ubuntu は `sudo apt install python3-tk`）。
+VRChat が前面かどうかは、Wayland（Hyprland / Omarchy）では `hyprctl`、X11 では `xdotool` か `xprop` で判定します。キーボードを読むには `input` グループが必要です（`sudo usermod -aG input "$USER"` のあと、ログインし直します）。パッケージには入力デバイス用のルールも入っています。
+
+Debian または Ubuntu:
 
 ```bash
-# 1. リリースページから tar.gz と .sha256 をダウンロードし、検証して展開
+sudo apt install ./vrc-expression-hotkeys_<version>-1_amd64.deb
+vrc-expression-hotkeys-gui
+vrc-expression-hotkeys --listen
+```
+
+Arch Linux は、リリースページのパッケージを入れます（`rust/packaging/` に `PKGBUILD` もあります）。
+
+```bash
+sudo pacman -U vrc-expression-hotkeys-<version>-1-x86_64.pkg.tar.zst
+```
+
+tar アーカイブから入れる場合:
+
+```bash
 sha256sum -c vrc-expression-hotkeys-linux-<version>.tar.gz.sha256
 tar xzf vrc-expression-hotkeys-linux-<version>.tar.gz
 cd vrc-expression-hotkeys-linux-<version>
-
-# 2. PATH の通った場所に配置
-install -Dm755 vrc-expression-hotkeys.py ~/.local/bin/vrc-expression-hotkeys
-
-# 3. キーボードを読めるようにする（実行後にログアウトして入り直す）
-sudo usermod -aG input "$USER"
-
-# 4. 起動
-vrc-expression-hotkeys            # ウィンドウ
-vrc-expression-hotkeys --listen   # ウィンドウなしで待受だけ
+./install.sh                  # ~/.local に入れる
+./install.sh --autostart      # ログイン時に、ウィンドウなしの待受を起動
+./install.sh --autostart-gui  # ログイン時にウィンドウを起動
 ```
 
-任意: ログイン時に待受を自動起動する（systemd ユーザーサービス）。
+`--autostart` と `--autostart-gui` は同時には使えません。前者は systemd のユーザーサービス、後者は XDG の自動起動です。外すときは `./uninstall.sh` を実行します。
 
-```bash
-mkdir -p ~/.config/systemd/user
-cat > ~/.config/systemd/user/vrc-expression-hotkeys.service <<'EOF'
-[Unit]
-Description=VRChat Expression Hotkeys (Shift+F1..F4)
-
-[Service]
-ExecStart=%h/.local/bin/vrc-expression-hotkeys --listen
-Restart=on-failure
-
-[Install]
-WantedBy=default.target
-EOF
-systemctl --user daemon-reload
-systemctl --user enable --now vrc-expression-hotkeys.service
-```
-
-VRChat が前面かどうかは、Wayland（Hyprland / Omarchy）では `hyprctl`、X11 では `xdotool` か `xprop` で判定します。
-
-アンインストール: `systemctl --user disable --now vrc-expression-hotkeys.service` を実行し、`~/.local/bin/vrc-expression-hotkeys` と `~/.config/systemd/user/vrc-expression-hotkeys.service` を削除します。
+`.deb` を入れたあと、同じ待受を有効にするには `systemctl --user enable --now vrc-expression-hotkeys.service` です。
 
 ## チェックアウトから実行
+
+```bash
+cd rust
+cargo run --release --bin vrc-expression-hotkeys-gui
+cargo run --release --bin vrc-expression-hotkeys -- --listen
+```
+
+Python 1.0 のスクリプトもリポジトリに残してあります。
 
 ```bash
 python3 vrc-expression-hotkeys.py
@@ -114,7 +116,29 @@ python3 vrc-expression-hotkeys.py --listen
 
 ## Unity パッケージ
 
-[unity/README.md](unity/README.md) を見てください。`unity/` をプロジェクトの `Packages` にコピーするか、ローカルパッケージとして追加します。
+エディタ用のツールは `unity/` にあります（F1 から F4 まで）。入れ方は次の 2 つです。詳しくは [unity/README.md](unity/README.md) も見てください。
+
+### A. リリースの tarball から
+
+1. リリースページから `com.drkai-lab.vrc-expression-hotkeys-<ver>.tgz` をダウンロードします。
+2. Unity で **Window > Package Manager** を開きます。
+3. **+** をクリックします。
+4. **Add package from tarball...** を選びます。
+5. `com.drkai-lab.vrc-expression-hotkeys-<ver>.tgz` を指定します。
+
+### B. Git から
+
+Git がインストールされている必要があります。
+
+1. **Window > Package Manager** を開きます。
+2. **+** をクリックします。
+3. **Add package from git URL...** を選びます。
+4. `https://github.com/drkai-lab/T1-VREmoKey-Free.git?path=unity` を入力します。
+5. **Add** をクリックします。
+
+版を固定したいときは、末尾に `#v2.0.0` を足します。
+
+`https://github.com/drkai-lab/T1-VREmoKey-Free.git?path=unity#v2.0.0`
 
 ## ライセンス
 

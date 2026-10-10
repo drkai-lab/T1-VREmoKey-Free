@@ -1,0 +1,9 @@
+[Unit]
+Description=VRChat Expression Hotkeys (Shift+F1..F4)
+
+[Service]
+ExecStart=/usr/bin/vrc-expression-hotkeys --listen
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
