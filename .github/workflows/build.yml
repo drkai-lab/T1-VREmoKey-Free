@@ -129,6 +129,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Test
         working-directory: rust
+        env:
+          VREMOKEY_FONT_SHOT: ${{ github.workspace }}/ja-ui.png
         run: cargo test --all-targets
       - name: Release build
         working-directory: rust
@@ -141,6 +143,39 @@ jobs:
           ./target/release/vrc-expression-hotkeys.exe --version
           ./target/release/vrc-expression-hotkeys.exe --help > $null
           ./target/release/vrc-expression-hotkeys-gui.exe --version
+      - name: Japanese window screenshot
+        id: window-shot
+        continue-on-error: true
+        timeout-minutes: 3
+        working-directory: rust
+        env:
+          VREMOKEY_UI_SHOT: ${{ github.workspace }}/ja-window.png
+        run: |
+          $root = Join-Path $env:TEMP "veh-ja-shot"
+          Remove-Item -Recurse -Force $root -ErrorAction SilentlyContinue
+          $thumbs = Join-Path $root "avatars\default\thumbs"
+          New-Item -ItemType Directory -Force -Path $thumbs | Out-Null
+          $png = [Convert]::FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
+          1..4 | ForEach-Object { [IO.File]::WriteAllBytes((Join-Path $thumbs "$_.png"), $png) }
+          $names = @("笑顔", "ウィンク", "驚き", "あいうえお")
+          $exprs = @()
+          for ($i = 1; $i -le 4; $i++) {
+            $exprs += [ordered]@{
+              index = $i
+              name = $names[$i - 1]
+              parameter = "Expression$i"
+              osc = "/avatar/parameters/Expression$i"
+              type = "bool"
+              thumb = "thumbs/$i.png"
+            }
+          }
+          $profile = [ordered]@{ id = "default"; name = "日本語アバター"; expressions = $exprs }
+          $utf8 = New-Object System.Text.UTF8Encoding $false
+          [IO.File]::WriteAllText((Join-Path $root "avatars\default\profile.json"), ($profile | ConvertTo-Json -Depth 5), $utf8)
+          [IO.File]::WriteAllText((Join-Path $root "settings.json"), '{"active_avatar":"default","lang":"ja"}', $utf8)
+          $env:VEH_CONFIG_DIR = $root
+          ./target/release/vrc-expression-hotkeys-gui.exe
+          if (!(Test-Path $env:VREMOKEY_UI_SHOT)) { exit 1 }
       - name: Install Inno Setup
         run: choco install innosetup -y
       - name: Build installer
@@ -149,6 +184,17 @@ jobs:
         with:
           name: rust-windows-x64
           path: dist-win-rust/**
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-ja-ui
+          path: ja-ui.png
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: steps.window-shot.outcome == 'success'
+        with:
+          name: windows-ja-window
+          path: ja-window.png
           if-no-files-found: error
 
   release:

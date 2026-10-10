@@ -15,6 +15,7 @@ install -m 644 packaging/vrc-expression-hotkeys.service "$dest/"
 install -m 644 packaging/99-vrc-expression-hotkeys.rules "$dest/"
 install -m 644 assets/app-64.png "$dest/icons/app-64.png"
 install -m 644 ../LICENSE "$dest/LICENSE"
+install -m 644 assets/OFL "$dest/OFL"
 mkdir -p ../dist
 tar -C "$stage" -czf "../dist/${name}.tar.gz" "$name"
 (cd ../dist && sha256sum "${name}.tar.gz" > "${name}.tar.gz.sha256")

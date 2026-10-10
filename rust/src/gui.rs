@@ -72,6 +72,8 @@ struct HotkeyApp {
     allow_exit: bool,
     tray: Option<Tray>,
     tray_failed: bool,
+    shot: Option<std::path::PathBuf>,
+    shot_wait: u8,
 }
 
 impl HotkeyApp {
@@ -79,7 +81,13 @@ impl HotkeyApp {
         install_fonts(&cc.egui_ctx);
         install_theme(&cc.egui_ctx);
         let settings = load_settings(&paths);
-        let lang = lang_of(&settings);
+        let shot = ui_shot_path();
+        // Screenshot mode previews Japanese without writing that choice to settings.
+        let lang = if shot.is_some() {
+            "ja".to_string()
+        } else {
+            lang_of(&settings)
+        };
         let enabled = as_bool(settings.get("enabled"), true);
         let target = resolve_config(&settings, &paths.config_dir).target;
         let osc = settings.get("osc").cloned().unwrap_or(Value::Null);
@@ -119,6 +127,8 @@ impl HotkeyApp {
             allow_exit: false,
             tray: None,
             tray_failed: false,
+            shot,
+            shot_wait: 0,
         };
         app.sync_avatar();
         app
@@ -567,6 +577,38 @@ impl HotkeyApp {
         texture
     }
 
+    fn capture_ui_shot(&mut self, ctx: &egui::Context) {
+        let Some(path) = self.shot.clone() else {
+            return;
+        };
+        let image = ctx.input(|input| {
+            input.events.iter().find_map(|event| match event {
+                egui::Event::Screenshot { image, .. } => Some(image.clone()),
+                _ => None,
+            })
+        });
+        let Some(image) = image else {
+            return;
+        };
+        if let Err(err) = save_color_image(&path, &image) {
+            log_line(&self.paths, &format!("screenshot failed: {err}"));
+            std::process::exit(1);
+        }
+        self.shot = None;
+        self.allow_exit = true;
+        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+    }
+
+    fn note_ui_shot(&mut self, ctx: &egui::Context) {
+        if self.shot.is_none() {
+            return;
+        }
+        self.shot_wait = self.shot_wait.saturating_add(1);
+        if self.shot_wait == 3 {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
+        }
+    }
+
     fn header_texture(&mut self, ctx: &egui::Context) -> Option<egui::TextureHandle> {
         if self.header_icon.is_none() {
             self.header_icon =
@@ -597,13 +639,18 @@ impl eframe::App for HotkeyApp {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
         }
+        self.capture_ui_shot(ctx);
         self.poll_tray(ctx);
         self.poll_avatar();
+        if self.shot.is_some() {
+            ctx.request_repaint();
+        }
         ctx.request_repaint_after(Duration::from_millis(200));
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.contents(ui);
+        self.note_ui_shot(ui.ctx());
     }
 
     fn on_exit(&mut self, _gl: Option<&glow::Context>) {
@@ -633,21 +680,59 @@ fn choice_labels(
     (labels, indexes)
 }
 
-fn install_fonts(ctx: &egui::Context) {
+/// egui paints only the fonts registered here. It does not consult Meiryo,
+/// Yu Gothic, MS Gothic, or Hiragino, so Japanese has to live in this file.
+fn ui_font_definitions() -> egui::FontDefinitions {
     let mut fonts = egui::FontDefinitions::default();
     fonts.font_data.insert(
-        "noto".to_owned(),
+        "noto-sans-jp".to_owned(),
         std::sync::Arc::new(egui::FontData::from_static(include_bytes!(
-            "../assets/NotoSansCJKjp-UI.otf"
+            "../assets/NotoSansJP-Regular.ttf"
         ))),
     );
     if let Some(family) = fonts.families.get_mut(&egui::FontFamily::Proportional) {
-        family.insert(0, "noto".to_owned());
+        family.insert(0, "noto-sans-jp".to_owned());
     }
     if let Some(family) = fonts.families.get_mut(&egui::FontFamily::Monospace) {
-        family.push("noto".to_owned());
+        family.push("noto-sans-jp".to_owned());
     }
-    ctx.set_fonts(fonts);
+    fonts
+}
+
+fn install_fonts(ctx: &egui::Context) {
+    ctx.set_fonts(ui_font_definitions());
+}
+
+fn ui_shot_path() -> Option<std::path::PathBuf> {
+    let path = std::env::var_os("VREMOKEY_UI_SHOT")?;
+    if path.is_empty() {
+        None
+    } else {
+        Some(std::path::PathBuf::from(path))
+    }
+}
+
+fn save_color_image(path: &std::path::Path, image: &egui::ColorImage) -> Result<(), String> {
+    let mut rgba = Vec::with_capacity(image.pixels.len() * 4);
+    for pixel in &image.pixels {
+        rgba.extend(pixel.to_array());
+    }
+    save_rgba_png(path, image.width() as u32, image.height() as u32, &rgba)
+}
+
+fn save_rgba_png(
+    path: &std::path::Path,
+    width: u32,
+    height: u32,
+    rgba: &[u8],
+) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+        }
+    }
+    image::save_buffer(path, rgba, width, height, image::ColorType::Rgba8)
+        .map_err(|err| err.to_string())
 }
 
 fn install_theme(ctx: &egui::Context) {
@@ -688,4 +773,176 @@ fn generic_image(size: usize) -> egui::ColorImage {
         }
     }
     image
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{save_rgba_png, tr, ui_font_definitions};
+    use crate::i18n::import_notice;
+    use eframe::egui;
+
+    fn preview_lines() -> Vec<String> {
+        let mut lines = Vec::new();
+        for key in [
+            "enable",
+            "filter",
+            "avatar",
+            "import",
+            "listen",
+            "unassigned",
+            "busy",
+            "ok",
+            "running",
+            "stopped",
+            "last",
+            "tray_open",
+            "tray_start",
+            "tray_stop",
+            "tray_quit",
+        ] {
+            lines.push(tr("ja", key).to_string());
+        }
+        lines.push(import_notice(&[5, 6, 12], "ja"));
+        lines.push("日本語アバター".to_string());
+        lines.push("1  笑顔".to_string());
+        lines.push("2  ウィンク".to_string());
+        lines.push("3  驚き".to_string());
+        lines.push("4  あいうえお".to_string());
+        lines
+    }
+
+    #[test]
+    fn japanese_ui_is_not_tofu() {
+        let mut fonts = egui::epaint::text::Fonts::new(
+            egui::epaint::text::TextOptions::default(),
+            ui_font_definitions(),
+        );
+        let font_id = egui::FontId::proportional(18.0);
+        let ppp = 2.0;
+        let lines = preview_lines();
+        let (galleys, atlas) = {
+            let mut view = fonts.with_pixels_per_point(ppp);
+            for line in &lines {
+                assert!(view.has_glyphs(&font_id, line), "missing glyph in {line}");
+            }
+            let kana: String = (0x3041..0x3097)
+                .chain(0x30A1..0x30F7)
+                .filter_map(char::from_u32)
+                .collect();
+            assert!(view.has_glyphs(&font_id, &kana), "kana is missing");
+            assert!(view.has_glyphs(&font_id, "日本語"));
+
+            let mut galleys = Vec::new();
+            for line in lines {
+                galleys.push(view.layout_no_wrap(line, font_id.clone(), egui::Color32::BLACK));
+            }
+            let atlas = view.image();
+            (galleys, atlas)
+        };
+
+        let (width, height, rgba) = paint_lines(&galleys, &atlas, ppp);
+        let dark = rgba.chunks(4).filter(|px| px[0] < 200).count();
+        assert!(
+            dark > 800,
+            "rendered Japanese is blank ({dark} dark pixels)"
+        );
+
+        let license = include_str!("../assets/OFL");
+        assert!(license.contains("SIL OPEN FONT LICENSE"));
+        assert!(license.contains("Noto Sans JP"));
+
+        if let Ok(path) = std::env::var("VREMOKEY_FONT_SHOT") {
+            save_rgba_png(std::path::Path::new(&path), width, height, &rgba)
+                .unwrap_or_else(|err| panic!("write {path}: {err}"));
+        }
+    }
+
+    fn paint_lines(
+        galleys: &[std::sync::Arc<egui::Galley>],
+        atlas: &egui::ColorImage,
+        ppp: f32,
+    ) -> (u32, u32, Vec<u8>) {
+        let margin = 16.0;
+        let gap = 8.0;
+        let mut width = 360.0_f32;
+        let mut y = margin;
+        for galley in galleys {
+            width = width.max(galley.rect.width() + margin * 2.0);
+            y += galley.rect.height() + gap;
+        }
+        let px_w = (width * ppp).ceil() as u32;
+        let px_h = ((y + margin) * ppp).ceil() as u32;
+        let mut canvas = Canvas {
+            rgba: vec![255_u8; (px_w * px_h * 4) as usize],
+            px_w,
+            px_h,
+            atlas,
+            ppp,
+        };
+        let mut origin_y = margin;
+        for galley in galleys {
+            canvas.blit_galley(galley, margin, origin_y);
+            origin_y += galley.rect.height() + gap;
+        }
+        (px_w, px_h, canvas.rgba)
+    }
+
+    struct Canvas<'a> {
+        rgba: Vec<u8>,
+        px_w: u32,
+        px_h: u32,
+        atlas: &'a egui::ColorImage,
+        ppp: f32,
+    }
+
+    impl Canvas<'_> {
+        fn blit_galley(&mut self, galley: &egui::Galley, origin_x: f32, origin_y: f32) {
+            for placed in &galley.rows {
+                for glyph in &placed.glyphs {
+                    let uv = glyph.uv_rect;
+                    if uv.is_nothing() {
+                        continue;
+                    }
+                    let left = origin_x + placed.pos.x + glyph.pos.x + uv.offset.x;
+                    let top = origin_y + placed.pos.y + glyph.pos.y + uv.offset.y;
+                    let dest_x = (left * self.ppp).round() as i32;
+                    let dest_y = (top * self.ppp).round() as i32;
+                    let src_w = i32::from(uv.max[0]) - i32::from(uv.min[0]);
+                    let src_h = i32::from(uv.max[1]) - i32::from(uv.min[1]);
+                    for row in 0..src_h {
+                        for col in 0..src_w {
+                            self.copy_coverage(
+                                dest_x + col,
+                                dest_y + row,
+                                i32::from(uv.min[0]) + col,
+                                i32::from(uv.min[1]) + row,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        fn copy_coverage(&mut self, dest_x: i32, dest_y: i32, src_x: i32, src_y: i32) {
+            if src_x < 0 || src_y < 0 || dest_x < 0 || dest_y < 0 {
+                return;
+            }
+            let (src_x, src_y) = (src_x as usize, src_y as usize);
+            let (dest_x, dest_y) = (dest_x as usize, dest_y as usize);
+            if src_x >= self.atlas.width()
+                || src_y >= self.atlas.height()
+                || dest_x >= self.px_w as usize
+                || dest_y >= self.px_h as usize
+            {
+                return;
+            }
+            let coverage = self.atlas[(src_x, src_y)].a();
+            let ink = 255 - coverage;
+            let index = (dest_y * self.px_w as usize + dest_x) * 4;
+            self.rgba[index] = ink;
+            self.rgba[index + 1] = ink;
+            self.rgba[index + 2] = ink;
+            self.rgba[index + 3] = 255;
+        }
+    }
 }

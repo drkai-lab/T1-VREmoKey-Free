@@ -19,6 +19,7 @@ install -m 644 packaging/vrc-expression-hotkeys.service "$root/usr/lib/systemd/u
 install -m 644 packaging/99-vrc-expression-hotkeys.rules "$root/usr/lib/udev/rules.d/"
 install -m 644 assets/app-64.png "$root/usr/share/icons/hicolor/64x64/apps/vrc-expression-hotkeys.png"
 install -m 644 ../LICENSE "$root/usr/share/licenses/vrc-expression-hotkeys/LICENSE"
+install -m 644 assets/OFL "$root/usr/share/licenses/vrc-expression-hotkeys/OFL"
 size=$(du -sb "$root" | awk '{print $1}')
 cat > "$root/.PKGINFO" <<EOF
 pkgname = vrc-expression-hotkeys
