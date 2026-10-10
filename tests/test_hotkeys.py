@@ -265,6 +265,25 @@ class OscTest(unittest.TestCase):
         address, value, kind = veh.parse_osc_packet(packet)
         self.assertEqual((address, value, kind), ("/avatar/change", "smile", "string"))
 
+    def test_aligned_address_is_nul_terminated(self):
+        address = "/avatar/parameters/GrinA"
+        self.assertEqual(len(address.encode()), 24)
+        sender = veh.OscSender()
+        down = sender.packet(address, True)
+        up = sender.packet(address, False)
+        self.assertEqual(down[:24], address.encode())
+        self.assertEqual(down[24:28], b"\x00\x00\x00\x00")
+        self.assertEqual(down[28:32], b",T\x00\x00")
+        self.assertEqual(down[32], 1)
+        self.assertEqual(up[28:32], b",F\x00\x00")
+        self.assertEqual(up[32], 0)
+        parsed = veh.parse_osc_packet(down)
+        self.assertEqual(parsed, (address, True, "bool"))
+        text = veh.encode_osc_string("/avatar/change", "abcd")
+        at = text.index(b"abcd")
+        self.assertEqual(text[at:at + 8], b"abcd\x00\x00\x00\x00")
+        self.assertIn(b",s\x00\x00", text)
+
     def test_event_struct(self):
         blob = struct.pack("llHHi", 1, 2, veh.KERNEL_EV_KEY, veh.KEY_F1, 1)
         self.assertEqual(len(blob), veh.INPUT_EVENT.size)

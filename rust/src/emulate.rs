@@ -21,7 +21,7 @@ use tempfile::TempDir;
 
 use crate::focus::probe_focus;
 use crate::listener::{AvatarOscListener, ExpressionListener};
-use crate::osc::{encode_osc_string, parse_osc_packet, OscTyped};
+use crate::osc::{encode_osc_string, parse_osc_packet, OscSender, OscTyped};
 use crate::paths::AppPaths;
 use crate::profile::{self, import_profile_pack, Expression, Profile};
 use crate::settings::{self, resolve_config};
@@ -243,6 +243,7 @@ fn inject_f5(down: bool) {
 struct Hit {
     address: String,
     value: bool,
+    raw: Vec<u8>,
 }
 
 struct FakeVrchat {
@@ -310,8 +311,9 @@ impl Drop for FakeVrchat {
     }
 }
 
-/// Bool packets from this app. An address whose length is already a multiple
-/// of 4 is sent without a trailing NUL, matching the long-standing encoder.
+/// Bool packets from this app. The encoder NUL-terminates every string,
+/// including an address whose length is a multiple of 4. The fallback still
+/// accepts a packet that omitted that terminator.
 fn parse_app_bool(data: &[u8]) -> Option<(String, bool)> {
     if let Some((address, OscTyped::Bool(value))) = parse_osc_packet(data) {
         return Some((address, value));
@@ -334,12 +336,15 @@ fn recv_osc(socket: UdpSocket, log: Arc<Mutex<Vec<Hit>>>, stop: Arc<AtomicBool>)
     while !stop.load(Ordering::SeqCst) {
         match socket.recv_from(&mut buf) {
             Ok((size, _)) => {
-                let Some((address, value)) = parse_app_bool(&buf[..size]) else {
+                let raw = buf[..size].to_vec();
+                let Some((address, value)) = parse_app_bool(&raw) else {
                     continue;
                 };
-                log.lock()
-                    .unwrap_or_else(|err| err.into_inner())
-                    .push(Hit { address, value });
+                log.lock().unwrap_or_else(|err| err.into_inner()).push(Hit {
+                    address,
+                    value,
+                    raw,
+                });
             }
             Err(err)
                 if err.kind() == ErrorKind::WouldBlock || err.kind() == ErrorKind::TimedOut => {}
@@ -565,7 +570,7 @@ fn walkthrough_body() -> Result<String, String> {
     confirm_saved(
         &paths,
         "avtr_smile",
-        "/avatar/parameters/Smile",
+        "/avatar/parameters/GrinA",
         "/avatar/parameters/Grin",
     )?;
     report.push(format!(
@@ -573,7 +578,7 @@ fn walkthrough_body() -> Result<String, String> {
         vrchat.port
     ));
     report.push(
-        "confirm: avatar=avtr_smile F1=/avatar/parameters/Smile F2=/avatar/parameters/Grin"
+        "confirm: avatar=avtr_smile F1=/avatar/parameters/GrinA F2=/avatar/parameters/Grin"
             .to_string(),
     );
 
@@ -627,9 +632,23 @@ fn walkthrough_body() -> Result<String, String> {
     }
 
     set_focus_fixed(true);
-    expect_chord(&session, Drive::Local, 1, "/avatar/parameters/Smile")
+    expect_chord(&session, Drive::Local, 1, "/avatar/parameters/GrinA")
         .map_err(|err| report.fail(format!("use: {err}")))?;
-    report.push("use: Shift+F1 /avatar/parameters/Smile press=true release=false".to_string());
+    let hits = session.vrchat.snapshot();
+    let press = hits
+        .iter()
+        .find(|hit| hit.address == "/avatar/parameters/GrinA" && hit.value);
+    let Some(press) = press else {
+        return Err(report.fail("wire: GrinA press was not recorded"));
+    };
+    if press.address.len() != 24 || press.raw.get(24..28) != Some(&[0, 0, 0, 0]) {
+        return Err(report.fail("wire: GrinA is missing four terminating NULs"));
+    }
+    if press.raw.get(28..32) != Some(b",T\0\0") {
+        return Err(report.fail("wire: GrinA type tag is not ,T padded with NUL"));
+    }
+    report.push("use: Shift+F1 /avatar/parameters/GrinA press=true release=false".to_string());
+    report.push("wire: /avatar/parameters/GrinA bytes=24 nul=4 tag=,T".to_string());
 
     set_focus_fixed(false);
     expect_silent(&session, 1).map_err(|err| report.fail(format!("unfocused: {err}")))?;
@@ -664,7 +683,7 @@ fn walkthrough_body() -> Result<String, String> {
         None => "none",
     };
     if matches!(probed, Some(true)) {
-        expect_chord(&session, Drive::Local, 1, "/avatar/parameters/Smile")
+        expect_chord(&session, Drive::Local, 1, "/avatar/parameters/GrinA")
             .map_err(|err| report.fail(format!("real-focus: {err}")))?;
         report.push(format!("real-focus: {probe_label} sent=true"));
     } else {
@@ -723,7 +742,7 @@ fn import_two(paths: &AppPaths) -> Result<(), String> {
     let smile = avatar_profile(
         "avtr_smile",
         "Smile Avatar",
-        &[("Smile", "Smile"), ("Grin", "Grin")],
+        &[("GrinA", "GrinA"), ("Grin", "Grin")],
     );
     let wave = avatar_profile(
         "avtr_wave",
@@ -852,6 +871,44 @@ fn expect_chord(session: &Session, drive: Drive, slot: u8, address: &str) -> Res
     let want_last = format!("Shift+F{slot} UP");
     wait_last(&session.listener, &want_last)?;
     wait_shift_added(&session.paths, before.len(), slot, address)?;
+    assert_recorded_wire(&session.vrchat.snapshot())?;
+    Ok(())
+}
+
+#[cfg(any(target_os = "linux", windows))]
+fn assert_recorded_wire(hits: &[Hit]) -> Result<(), String> {
+    if hits.is_empty() {
+        return Err("wire: no packets".into());
+    }
+    for hit in hits {
+        let want = OscSender::packet(&hit.address, hit.value);
+        if hit.raw != want {
+            return Err(format!(
+                "wire: {}={} is {} bytes, encoder is {}",
+                hit.address,
+                hit.value,
+                hit.raw.len(),
+                want.len()
+            ));
+        }
+        let len = hit.address.len();
+        if len % 4 == 0 && hit.raw.get(len..len + 4) != Some(&[0, 0, 0, 0]) {
+            return Err(format!(
+                "wire: {}-byte address {} is missing four terminating NULs",
+                len, hit.address
+            ));
+        }
+        let tag: &[u8] = if hit.value { b",T\0\0" } else { b",F\0\0" };
+        if !hit.raw.windows(4).any(|part| part == tag) {
+            return Err(format!(
+                "wire: type tag for {} is not NUL-terminated",
+                hit.address
+            ));
+        }
+        if parse_osc_packet(&hit.raw).is_none() {
+            return Err(format!("wire: {} does not parse as OSC", hit.address));
+        }
+    }
     Ok(())
 }
 
@@ -1033,22 +1090,26 @@ fn wait_until(timeout: Duration, mut pred: impl FnMut() -> bool) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{parse_app_bool, run_walkthrough};
-    use crate::osc::OscSender;
+    use crate::osc::{parse_osc_packet, OscSender, OscTyped};
 
     #[test]
-    fn aligned_expression_address_still_parses() {
-        let down = OscSender::packet("/avatar/parameters/Smile", true);
-        let (address, value) = parse_app_bool(&down).expect("down");
-        assert_eq!(address, "/avatar/parameters/Smile");
-        assert!(value);
-        let up = OscSender::packet("/avatar/parameters/Smile", false);
-        let (address, value) = parse_app_bool(&up).expect("up");
-        assert_eq!(address, "/avatar/parameters/Smile");
-        assert!(!value);
-        let ordinary = OscSender::packet("/avatar/parameters/Expression1", true);
-        let (address, value) = parse_app_bool(&ordinary).expect("ordinary");
-        assert_eq!(address, "/avatar/parameters/Expression1");
-        assert!(value);
+    fn aligned_expression_address_is_nul_terminated() {
+        let address = "/avatar/parameters/GrinA";
+        assert_eq!(address.len(), 24);
+        let down = OscSender::packet(address, true);
+        assert_eq!(&down[24..28], &[0, 0, 0, 0]);
+        assert_eq!(&down[28..32], b",T\0\0");
+        let (parsed, value) = parse_osc_packet(&down).expect("standard parser");
+        assert_eq!(parsed, address);
+        assert_eq!(value, OscTyped::Bool(true));
+        let (via_app, flag) = parse_app_bool(&down).expect("down");
+        assert_eq!(via_app, address);
+        assert!(flag);
+        let up = OscSender::packet(address, false);
+        assert_eq!(&up[28..32], b",F\0\0");
+        let (parsed, value) = parse_osc_packet(&up).expect("up parser");
+        assert_eq!(parsed, address);
+        assert_eq!(value, OscTyped::Bool(false));
     }
 
     #[test]
@@ -1057,7 +1118,8 @@ mod tests {
         println!("{report}");
         for needle in [
             "confirm:",
-            "/avatar/parameters/Smile",
+            "/avatar/parameters/GrinA",
+            "wire: /avatar/parameters/GrinA bytes=24 nul=4 tag=,T",
             "/avatar/parameters/Wave",
             "/avatar/parameters/Bye",
             "unfocused: suppressed",

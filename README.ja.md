@@ -8,7 +8,7 @@ VRChat 表情ホットキー（T1-VREmoKey の無料版）。
 
 完全版の T1-VREmoKey は、T1 ミニキーボード向けの別プロジェクトです。完全版は 12 個の表情、キーボード本体のボタンへの割り当て、ダイヤルでの表情の切り替え、キーボードへの設定の書き込みに対応しています。
 
-コマンド名は `vrc-expression-hotkeys` のまま、設定の保存場所も変わりません。今までの設定をそのまま使えます。バージョン 2.0.1 は Rust 版で、ウィンドウとトレイに出る名前は **T1-VREmoKey-Free** です。リリースビルドはシンボルを削り、リンク時最適化を掛けています。難読化したビルドではありません。
+コマンド名は `vrc-expression-hotkeys` のまま、設定の保存場所も変わりません。今までの設定をそのまま使えます。バージョン 2.0.2 は Rust 版で、ウィンドウとトレイに出る名前は **T1-VREmoKey-Free** です。リリースビルドはシンボルを削り、リンク時最適化を掛けています。難読化したビルドではありません。
 
 ## できること
 
@@ -41,6 +41,8 @@ Linux でキーボードが読めないときは、ユーザーを `input` グ�
 | Arch | `vrc-expression-hotkeys-<version>-1-x86_64.pkg.tar.zst` |
 | Linux（tar アーカイブ） | `vrc-expression-hotkeys-linux-<version>.tar.gz`（と `.sha256`） |
 | Unity | `com.drkai-lab.vrc-expression-hotkeys-<version>.tgz` |
+
+Windows の実行ファイルは Visual C++ 再頒布可能パッケージなしで動きます。
 
 ## Windows へのインストール（インストーラ）
 
@@ -129,7 +131,7 @@ wine target/x86_64-pc-windows-gnu/debug/vrc-expression-hotkeys.exe --emulate
 
 1. 本番のプロファイル取り込みで、表情の違うアバターを 2 つ読み、`settings.json` を書きます。
 2. 保存結果を読み直し、F1 が最初のアバターのパラメータになることを確認します。
-3. 偽 T1 が Shift+F1 を押して離します。偽 VRChat は true のあと false を記録します。
+3. 偽 T1 が Shift+F1 を押して離します。偽 VRChat は true のあと false を記録します。F1 のアドレスは `/avatar/parameters/GrinA`（24 バイト）です。通しは、このパケットがアドレスのあとに NUL を 4 バイト足し、型タグ `,T` も 4 バイト境界まで NUL で埋めていることを確認します。
 4. フォーカスの差し替えを「前面ではない」にして同じコードを送り、OSC が出ないことを確認します。
 5. 差し替えを外し、本番の前面判定を使います。コードを送るのは、その判定が VRChat を前面と見たときだけです。画面の無い環境では前面ウィンドウの名前が取れないことが多く、`when_unknown` は `deny` のままなので、そのコードは送られません。
 6. 偽 VRChat が `/avatar/change` で 2 体目へ切り替えます。保存されたアバターを確認したあと、Shift+F1 は 2 体目のパラメータになります。
@@ -178,9 +180,9 @@ Git がインストールされている必要があります。
 4. `https://github.com/drkai-lab/T1-VREmoKey-Free.git?path=unity` を入力します。
 5. **Add** をクリックします。
 
-版を固定したいときは、末尾に `#v2.0.0` を足します。
+版を固定したいときは、末尾に `#v2.0.2` を足します。
 
-`https://github.com/drkai-lab/T1-VREmoKey-Free.git?path=unity#v2.0.0`
+`https://github.com/drkai-lab/T1-VREmoKey-Free.git?path=unity#v2.0.2`
 
 ## ライセンス
 

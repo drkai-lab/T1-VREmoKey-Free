@@ -1,0 +1,6 @@
+# The shipped Windows exe is built with the MSVC toolchain. Link the C
+# runtime statically so it does not need the Visual C++ redistributable.
+# A RUSTFLAGS environment variable replaces this list, so CI repeats the
+# flag next to --remap-path-prefix.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

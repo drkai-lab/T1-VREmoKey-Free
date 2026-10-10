@@ -15,7 +15,7 @@ The full edition, **T1-VREmoKey**, is for the T1 mini keyboard. It supports
 12 expressions, assigning them to the keyboard's own buttons, cycling them
 with the dial, and writing the keyboard's settings. It is a separate project.
 
-The command name stays `vrc-expression-hotkeys`, and settings stay in the same directories, so an existing setup keeps working. Version 2.0.1 is the Rust app. Its window title and tray name are **T1-VREmoKey-Free**. Release builds strip symbols and use link-time optimization. This public build is not obfuscated.
+The command name stays `vrc-expression-hotkeys`, and settings stay in the same directories, so an existing setup keeps working. Version 2.0.2 is the Rust app. Its window title and tray name are **T1-VREmoKey-Free**. Release builds strip symbols and use link-time optimization. This public build is not obfuscated.
 
 ## What it does
 
@@ -61,6 +61,8 @@ Get the latest files from the [Releases page](https://github.com/drkai-lab/T1-VR
 | Arch | `vrc-expression-hotkeys-<version>-1-x86_64.pkg.tar.zst` |
 | Linux (tarball) | `vrc-expression-hotkeys-linux-<version>.tar.gz` (+ `.sha256`) |
 | Unity | `com.drkai-lab.vrc-expression-hotkeys-<version>.tgz` |
+
+The Windows executable does not need the Visual C++ redistributable.
 
 ## Install on Windows (installer)
 
@@ -151,7 +153,7 @@ The walkthrough:
 
 1. Imports two avatar profiles through the app's profile importer and writes `settings.json`.
 2. Reads them back and checks that F1 resolves to the first avatar's parameter.
-3. Presses and releases Shift+F1 through the platform hook (`poll` on evdev, or the low-level keyboard hook). The stand-in VRChat records bool true, then false.
+3. Presses and releases Shift+F1 through the platform hook (`poll` on evdev, or the low-level keyboard hook). The stand-in VRChat records bool true, then false. F1's address is `/avatar/parameters/GrinA` (24 bytes). The walkthrough checks that this packet ends the address with four NUL bytes, then the type tag `,T` padded to four bytes.
 4. Repeats the chord with the focus substitute forced off. No OSC is sent.
 5. Clears the substitute and uses the real foreground check. The chord is sent only when that check says VRChat is focused. A headless machine usually cannot name the focused window, and `when_unknown` stays `deny`, so the chord is dropped.
 6. Sends `/avatar/change` for the second avatar, checks the saved profile, then presses Shift+F1 again and expects the second parameter.
@@ -200,9 +202,9 @@ Git has to be installed.
 4. Enter `https://github.com/drkai-lab/T1-VREmoKey-Free.git?path=unity`.
 5. Click **Add**.
 
-To pin a version, append `#v2.0.0`:
+To pin a version, append `#v2.0.2`:
 
-`https://github.com/drkai-lab/T1-VREmoKey-Free.git?path=unity#v2.0.0`
+`https://github.com/drkai-lab/T1-VREmoKey-Free.git?path=unity#v2.0.2`
 
 ## License
 

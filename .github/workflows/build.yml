@@ -152,7 +152,8 @@ jobs:
       - name: Release build
         working-directory: rust
         env:
-          RUSTFLAGS: --remap-path-prefix=${{ github.workspace }}=/src
+          # RUSTFLAGS replaces .cargo/config.toml, so crt-static is repeated here.
+          RUSTFLAGS: --remap-path-prefix=${{ github.workspace }}=/src -C target-feature=+crt-static
         run: cargo build --release
       - name: Smoke
         working-directory: rust
@@ -161,6 +162,26 @@ jobs:
           $help = ./target/release/vrc-expression-hotkeys.exe --help 2>&1 | Out-String
           if ($help -match '--emulate') { Write-Error 'release build includes --emulate'; exit 1 }
           ./target/release/vrc-expression-hotkeys-gui.exe --version
+      - name: Reject the VC++ runtime DLL
+        shell: pwsh
+        working-directory: rust
+        run: |
+          $ErrorActionPreference = "Stop"
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $vs) { throw "Visual Studio with the C++ tools was not found" }
+          $dumpbin = Get-ChildItem -Path (Join-Path $vs "VC\Tools\MSVC") -Filter dumpbin.exe -Recurse |
+            Where-Object { $_.FullName -match 'Hostx64\\x64\\dumpbin.exe$' } |
+            Select-Object -First 1
+          if (-not $dumpbin) { throw "dumpbin.exe was not found" }
+          foreach ($name in @("vrc-expression-hotkeys.exe", "vrc-expression-hotkeys-gui.exe")) {
+            $exe = Join-Path "target\release" $name
+            $out = & $dumpbin.FullName /dependents $exe | Out-String
+            Write-Host $out
+            if ($out -match '(?i)vcruntime|msvcp\d+\.dll|concrt\d+\.dll') {
+              throw "$name still depends on the VC++ redistributable"
+            }
+          }
       - name: Japanese window screenshot
         id: window-shot
         continue-on-error: true
@@ -309,7 +330,26 @@ jobs:
         run: |
           version="$(sed -n 's/^version = "\(.*\)"/\1/p' rust/Cargo.toml | head -n 1)"
           unity_version="$(python3 -c 'import json; print(json.load(open("unity/package.json"))["version"])')"
-          gh release create "${GITHUB_REF_NAME}" --generate-notes \
+          if [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
+            echo "tag ${GITHUB_REF_NAME} does not match Cargo.toml ${version}" >&2
+            exit 1
+          fi
+          python3 - "$version" << 'PY'
+          import pathlib
+          import sys
+
+          version = sys.argv[1]
+          text = pathlib.Path("CHANGELOG.md").read_text(encoding="utf-8")
+          marker = f"## {version}\n"
+          start = text.find(marker)
+          if start < 0:
+              sys.exit(f"CHANGELOG.md has no section {marker!r}")
+          rest = text[start + len(marker):]
+          nxt = rest.find("\n## ")
+          body = (rest if nxt < 0 else rest[:nxt]).strip() + "\n"
+          pathlib.Path("/tmp/release-notes.md").write_text(body, encoding="utf-8")
+          PY
+          gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes-file /tmp/release-notes.md \
             "out/vrc-expression-hotkeys.exe" \
             "out/vrc-expression-hotkeys-gui.exe" \
             "out/vrc-expression-hotkeys-1.0.0-setup.exe" \

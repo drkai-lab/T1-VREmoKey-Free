@@ -1,7 +1,7 @@
 ; Inno Setup script for the Rust free edition (Windows x64)
 
 #define AppName "T1-VREmoKey-Free"
-#define AppVersion "2.0.1"
+#define AppVersion "2.0.2"
 #define AppPublisher "drkai-lab"
 #define AppURL "https://github.com/drkai-lab/T1-VREmoKey-Free"
 

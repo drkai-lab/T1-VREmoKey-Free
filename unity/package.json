@@ -1,6 +1,6 @@
 {
   "name": "com.drkai-lab.vrc-expression-hotkeys",
-  "version": "2.0.0",
+  "version": "2.0.2",
   "displayName": "T1-VREmoKey-Free",
   "description": "Free edition. Name up to 4 avatar expressions (Shift+F1 through F4), render face previews, and export a profile pack. Editor tools use reflection, so a project without the VRChat SDK still compiles.",
   "unity": "2021.3",
