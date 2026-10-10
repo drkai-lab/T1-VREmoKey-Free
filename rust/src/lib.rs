@@ -5,6 +5,8 @@
 
 pub mod chord;
 pub mod cli;
+#[cfg(any(test, feature = "emulate"))]
+pub mod emulate;
 pub mod focus;
 pub mod gui;
 pub mod i18n;

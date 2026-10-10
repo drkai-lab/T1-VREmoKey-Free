@@ -264,6 +264,13 @@ pub fn linux_active_fields(
 }
 
 pub fn probe_focus(target: &Target) -> Option<bool> {
+    #[cfg(any(test, feature = "emulate"))]
+    {
+        if let Some(answer) = crate::emulate::forced_focus_answer() {
+            return answer;
+        }
+        crate::emulate::note_real_focus_probe();
+    }
     #[cfg(windows)]
     {
         crate::keys::windows_focused(target)

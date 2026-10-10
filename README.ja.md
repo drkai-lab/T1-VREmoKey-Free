@@ -104,6 +104,48 @@ python3 vrc-expression-hotkeys.py --listen
 
 設定はアプリの設定ディレクトリにあります（Linux は `~/.config/vrc-expression-hotkeys`、Windows は `%APPDATA%\vrc-expression-hotkeys`）。プロファイルは、その中にある `avatars/<id>/profile.json` と `thumbs/*.png` です。
 
+## 実機なしの通しテスト
+
+無料版はキーボード本体と通信しません。T1 のボタンは、ここでは Shift+F1 から Shift+F4 を押して離すキーとしてだけ扱います。テスト用ビルドは、そのキーをアプリのキーフックの下に差し込めます。Linux では evdev の `poll`、Windows では低レベルキーボードフックの `poll` が、本物のキーと同じ形に変えます。偽の VRChat は OSC の bool を記録し、`/avatar/change` を送れます。
+
+この差し込みは配布物に入りません。`cargo build --release` と各パッケージは `--features emulate` を付けません。公開バイナリに `--emulate` は無く、注入用のキューもありません。
+
+```bash
+cd rust
+cargo test --lib walkthrough_configure_confirm_use_and_switch_avatar
+cargo run --features emulate --bin vrc-expression-hotkeys -- --emulate
+```
+
+`cargo test` だけでも、ライブラリテストの一つとして同じ通しが走ります。`--emulate` はコンソール版の中で同じ通しを実行し、全部通ると終了コード 0 で終わります。
+
+Windows 向けに feature を付けてビルドした exe は、Wine でも同じコマンドで走ります。
+
+```bash
+cargo build --target x86_64-pc-windows-gnu --features emulate --bin vrc-expression-hotkeys
+wine target/x86_64-pc-windows-gnu/debug/vrc-expression-hotkeys.exe --emulate
+```
+
+通しの中身は次のとおりです。
+
+1. 本番のプロファイル取り込みで、表情の違うアバターを 2 つ読み、`settings.json` を書きます。
+2. 保存結果を読み直し、F1 が最初のアバターのパラメータになることを確認します。
+3. 偽 T1 が Shift+F1 を押して離します。偽 VRChat は true のあと false を記録します。
+4. フォーカスの差し替えを「前面ではない」にして同じコードを送り、OSC が出ないことを確認します。
+5. 差し替えを外し、本番の前面判定を使います。コードを送るのは、その判定が VRChat を前面と見たときだけです。画面の無い環境では前面ウィンドウの名前が取れないことが多く、`when_unknown` は `deny` のままなので、そのコードは送られません。
+6. 偽 VRChat が `/avatar/change` で 2 体目へ切り替えます。保存されたアバターを確認したあと、Shift+F1 は 2 体目のパラメータになります。
+
+通しのあいだ、`127.0.0.1` の注入ポートが `press N` と `release N`（N は 1 から 4）、それに `focus on` / `focus off` / `focus live` を受け付けます。最後のコードは、フックのスレッドの外からこのポート経由で送ります。
+
+限界:
+
+- 偽 T1 はデバイスノードを作りません。注入イベントは `/dev/input` も、物理的な `WH_KEYBOARD_LL` のパケットも通りません。Wine では実キーの低レベルフックが届かないことが多いです。このコマンドはその配送を証明しません。レポートの `hook: low-level installed` または `hook: low-level unavailable` が、`SetWindowsHookExW` の成否です。
+- 通しのあいだ、フックは物理キーボードを読みません。そのマシンでの打鍵が結果を変えないようにするためです。実キーがフックに届くことは見ません。
+- 対象は Shift+F1..F4 の押下と解放で、一度に一つのコードです。F5..F12、ダイヤル、ハードウェアのレポートは範囲外です。F5 を混ぜても OSC が出ないことだけ確認します。
+- 偽 VRChat が記録するのは OSC bool で、送れるのは `/avatar/change` の文字列です。アバターのロード、アニメータ、bool 以外のパラメータは見ません。
+- フォーカスの差し替え口は、このテスト用ビルドにだけあります。外したときは Windows の前面プロセス判定か、Linux の `hyprctl` / `xdotool` / `xprop` が走ります。この段階が通るのは、本番の判定が走り、ゲートがその結果に従ったときです。
+- ウィンドウ、トレイ、Unity からの書き出しは、このコマンドでは操作しません。
+- `--emulate` は一時ディレクトリだけを使います。`~/.config/vrc-expression-hotkeys` と `%APPDATA%\vrc-expression-hotkeys` は読み書きしません。
+
 ## 手動チェックリスト
 
 - [ ] Unity からプロファイルを書き出し、このアプリで読み込む。F1..F4 に名前とサムネイルが出る。

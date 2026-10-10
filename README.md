@@ -126,6 +126,48 @@ Settings live in the app config directory (`~/.config/vrc-expression-hotkeys`
 on Linux, `%APPDATA%\vrc-expression-hotkeys` on Windows). Profiles are
 `avatars/<id>/profile.json` and `thumbs/*.png` under that directory.
 
+## Walkthrough without a keyboard or VRChat
+
+The free edition does not talk to keyboard hardware. A T1 button only matters here as the Shift+F1..F4 chord it would type. A test build can push that chord in underneath the key hook, and a small OSC stand-in records what the app sends.
+
+The stand-in is absent from release builds. `cargo build --release` and the packages do not pass `--features emulate`, so a published binary has no `--emulate` flag and no inject queue.
+
+```bash
+cd rust
+cargo test --lib walkthrough_configure_confirm_use_and_switch_avatar
+cargo run --features emulate --bin vrc-expression-hotkeys -- --emulate
+```
+
+`cargo test` runs the same walkthrough as a library test. `--emulate` runs it inside the console binary and exits 0 when every step passes.
+
+A Windows build with the feature uses the same command under Wine:
+
+```bash
+cargo build --target x86_64-pc-windows-gnu --features emulate --bin vrc-expression-hotkeys
+wine target/x86_64-pc-windows-gnu/debug/vrc-expression-hotkeys.exe --emulate
+```
+
+The walkthrough:
+
+1. Imports two avatar profiles through the app's profile importer and writes `settings.json`.
+2. Reads them back and checks that F1 resolves to the first avatar's parameter.
+3. Presses and releases Shift+F1 through the platform hook (`poll` on evdev, or the low-level keyboard hook). The stand-in VRChat records bool true, then false.
+4. Repeats the chord with the focus substitute forced off. No OSC is sent.
+5. Clears the substitute and uses the real foreground check. The chord is sent only when that check says VRChat is focused. A headless machine usually cannot name the focused window, and `when_unknown` stays `deny`, so the chord is dropped.
+6. Sends `/avatar/change` for the second avatar, checks the saved profile, then presses Shift+F1 again and expects the second parameter.
+
+While the walkthrough is running it listens on `127.0.0.1` for `press N`, `release N` (N is 1..4), and `focus on`, `focus off`, or `focus live`. The last chord is sent through that socket, from outside the hook thread.
+
+Limits:
+
+- The stand-in does not create a device node. Injected events do not travel through `/dev/input` or a physical `WH_KEYBOARD_LL` packet. Wine often does not deliver real low-level hook events; this command does not claim that it does. The report line `hook: low-level installed` or `hook: low-level unavailable` says whether `SetWindowsHookExW` succeeded.
+- For the duration of the walkthrough the hook ignores the physical keyboard, so typing on that machine cannot change the result. The run does not prove that a real key reaches the hook.
+- The covered chord is Shift+F1..F4, press then release, one chord at a time. F5..F12, a dial, and hardware reports are out of scope. The run does check that an F5 chord produces no OSC.
+- The stand-in VRChat stores OSC bools and can send `/avatar/change`. It does not load an avatar, run an animator, or accept a non-bool parameter.
+- The focus substitute exists only in this test build. Without it, the real Windows foreground-process check or the Linux `hyprctl` / `xdotool` / `xprop` check runs. Passing that step means the real check ran and the gate followed it.
+- The window, tray, and Unity exporter are outside this command.
+- `--emulate` uses a temporary directory. It does not read or write `~/.config/vrc-expression-hotkeys` or `%APPDATA%\vrc-expression-hotkeys`.
+
 ## Manual checklist
 
 - [ ] Export a profile from Unity and import it. Names and thumbnails show on F1..F4.

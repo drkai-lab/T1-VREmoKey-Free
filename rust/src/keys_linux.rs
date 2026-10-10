@@ -74,6 +74,21 @@ impl LinuxKeySource {
 
 impl crate::keys::KeySource for LinuxKeySource {
     fn poll(&mut self, timeout: Duration) -> Vec<KeyEvent> {
+        #[cfg(any(test, feature = "emulate"))]
+        {
+            crate::emulate::note_hook_poll();
+            if crate::emulate::suppress_real_keys() {
+                let events = drain_emulated();
+                if events.is_empty() && !timeout.is_zero() {
+                    std::thread::sleep(timeout.min(Duration::from_millis(40)));
+                }
+                return events;
+            }
+            let injected = drain_emulated();
+            if !injected.is_empty() {
+                return injected;
+            }
+        }
         let mut events = Vec::new();
         if Instant::now() >= self.next_scan || self.devices.is_empty() {
             for path in self.rescan() {
@@ -132,6 +147,18 @@ impl crate::keys::KeySource for LinuxKeySource {
     fn close(&mut self) {
         self.devices.clear();
     }
+}
+
+#[cfg(any(test, feature = "emulate"))]
+fn drain_emulated() -> Vec<KeyEvent> {
+    crate::emulate::drain_evdev()
+        .into_iter()
+        .map(|(code, value)| KeyEvent::Evdev {
+            device: "emulated-t1".into(),
+            code,
+            value,
+        })
+        .collect()
 }
 
 enum Opened {

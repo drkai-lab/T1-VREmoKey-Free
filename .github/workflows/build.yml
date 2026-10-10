@@ -96,6 +96,12 @@ jobs:
       - name: Test
         working-directory: rust
         run: cargo test --all-targets
+      - name: Emulate walkthrough
+        working-directory: rust
+        run: |
+          cargo clippy --all-targets --features emulate -- -D warnings
+          cargo build --features emulate --bin vrc-expression-hotkeys
+          ./target/debug/vrc-expression-hotkeys --emulate
       - name: Release build
         working-directory: rust
         env:
@@ -105,8 +111,12 @@ jobs:
         working-directory: rust
         run: |
           ./target/release/vrc-expression-hotkeys --version
-          ./target/release/vrc-expression-hotkeys --help > /dev/null
+          ./target/release/vrc-expression-hotkeys --help > /tmp/veh-release-help.txt
           ./target/release/vrc-expression-hotkeys-gui --version
+          if grep -q -- '--emulate' /tmp/veh-release-help.txt; then
+            echo "release build includes --emulate" >&2
+            exit 1
+          fi
       - name: Packages
         working-directory: rust
         run: |
@@ -134,6 +144,11 @@ jobs:
         env:
           VREMOKEY_FONT_SHOT: ${{ github.workspace }}/ja-ui.png
         run: cargo test --all-targets
+      - name: Emulate walkthrough
+        working-directory: rust
+        run: |
+          cargo build --features emulate --bin vrc-expression-hotkeys
+          ./target/debug/vrc-expression-hotkeys.exe --emulate
       - name: Release build
         working-directory: rust
         env:
@@ -143,7 +158,8 @@ jobs:
         working-directory: rust
         run: |
           ./target/release/vrc-expression-hotkeys.exe --version
-          ./target/release/vrc-expression-hotkeys.exe --help > $null
+          $help = ./target/release/vrc-expression-hotkeys.exe --help 2>&1 | Out-String
+          if ($help -match '--emulate') { Write-Error 'release build includes --emulate'; exit 1 }
           ./target/release/vrc-expression-hotkeys-gui.exe --version
       - name: Japanese window screenshot
         id: window-shot

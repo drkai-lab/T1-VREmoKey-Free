@@ -53,6 +53,12 @@ winres = "0.1"
 [dev-dependencies]
 zip = { version = "2", default-features = false, features = ["deflate"] }
 
+[features]
+# Stand-in chords and stand-in VRChat. `cargo test` compiles this module,
+# and `cargo run --features emulate` exposes `--emulate`.
+# Release packages leave the feature off.
+emulate = []
+
 [profile.release]
 opt-level = 3
 lto = "fat"
