@@ -15,7 +15,7 @@ The full edition, **T1-VREmoKey**, is for the T1 mini keyboard. It supports
 12 expressions, assigning them to the keyboard's own buttons, cycling them
 with the dial, and writing the keyboard's settings. It is a separate project.
 
-The command name stays `vrc-expression-hotkeys`, and settings stay in the same directories, so an existing setup keeps working. Version 2.0.2 is the Rust app. Its window title and tray name are **T1-VREmoKey-Free**. Release builds strip symbols and use link-time optimization. This public build is not obfuscated.
+The command name stays `vrc-expression-hotkeys`, and settings stay in the same directories, so an existing setup keeps working. Version 2.0.3 is the Rust app. Its window title and tray name are **T1-VREmoKey-Free**. Release builds strip symbols and use link-time optimization. This public build is not obfuscated.
 
 ## What it does
 
@@ -202,9 +202,9 @@ Git has to be installed.
 4. Enter `https://github.com/drkai-lab/T1-VREmoKey-Free.git?path=unity`.
 5. Click **Add**.
 
-To pin a version, append `#v2.0.2`:
+To pin a version, append `#v2.0.3`:
 
-`https://github.com/drkai-lab/T1-VREmoKey-Free.git?path=unity#v2.0.2`
+`https://github.com/drkai-lab/T1-VREmoKey-Free.git?path=unity#v2.0.3`
 
 ## License
 

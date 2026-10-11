@@ -8,7 +8,7 @@ VRChat 表情ホットキー（T1-VREmoKey の無料版）。
 
 完全版の T1-VREmoKey は、T1 ミニキーボード向けの別プロジェクトです。完全版は 12 個の表情、キーボード本体のボタンへの割り当て、ダイヤルでの表情の切り替え、キーボードへの設定の書き込みに対応しています。
 
-コマンド名は `vrc-expression-hotkeys` のまま、設定の保存場所も変わりません。今までの設定をそのまま使えます。バージョン 2.0.2 は Rust 版で、ウィンドウとトレイに出る名前は **T1-VREmoKey-Free** です。リリースビルドはシンボルを削り、リンク時最適化を掛けています。難読化したビルドではありません。
+コマンド名は `vrc-expression-hotkeys` のまま、設定の保存場所も変わりません。今までの設定をそのまま使えます。バージョン 2.0.3 は Rust 版で、ウィンドウとトレイに出る名前は **T1-VREmoKey-Free** です。リリースビルドはシンボルを削り、リンク時最適化を掛けています。難読化したビルドではありません。
 
 ## できること
 
@@ -180,9 +180,9 @@ Git がインストールされている必要があります。
 4. `https://github.com/drkai-lab/T1-VREmoKey-Free.git?path=unity` を入力します。
 5. **Add** をクリックします。
 
-版を固定したいときは、末尾に `#v2.0.2` を足します。
+版を固定したいときは、末尾に `#v2.0.3` を足します。
 
-`https://github.com/drkai-lab/T1-VREmoKey-Free.git?path=unity#v2.0.2`
+`https://github.com/drkai-lab/T1-VREmoKey-Free.git?path=unity#v2.0.3`
 
 ## ライセンス
 
