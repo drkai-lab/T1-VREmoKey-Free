@@ -12,7 +12,8 @@ use crate::i18n::{import_notice, tr};
 use crate::listener::{AvatarOscListener, ExpressionListener};
 use crate::paths::{log_line, AppPaths};
 use crate::profile::{
-    activate_avatar, active_profile, expression_slot, import_profile_pack, list_profiles, Slot,
+    activate_avatar, active_profile, expression_slot, import_profile_pack, list_profiles,
+    stage_card, Slot,
 };
 use crate::settings::{
     avatar_listen_port, lang_of, load_settings, normalize_assign, resolve_config, save_settings,
@@ -74,6 +75,8 @@ struct HotkeyApp {
     tray_failed: bool,
     shot: Option<std::path::PathBuf>,
     shot_wait: u8,
+    stage_pin: Option<i64>,
+    stage_dismissed: Option<String>,
 }
 
 impl HotkeyApp {
@@ -129,6 +132,8 @@ impl HotkeyApp {
             tray_failed: false,
             shot,
             shot_wait: 0,
+            stage_pin: None,
+            stage_dismissed: None,
         };
         app.sync_avatar();
         app
@@ -259,8 +264,9 @@ impl HotkeyApp {
     fn rows(&mut self, ui: &mut egui::Ui) {
         let lang = self.lang.clone();
         let profile = active_profile(&self.settings, &self.paths.config_dir);
-        let (labels, indexes) = choice_labels(&lang, &profile, &self.paths);
+        let choices = choice_labels(&lang, &profile, &self.paths);
         let assign = normalize_assign(self.settings.get("fkey_assign"));
+        let mut pinned = None;
         for name in FKEY_NAMES {
             let chosen = assign.get(name).copied().unwrap_or(0);
             let slot = if chosen == 0 {
@@ -269,12 +275,19 @@ impl HotkeyApp {
                 expression_slot(chosen, &profile, &self.paths.config_dir)
             };
             let thumb = self.thumb_texture(ui.ctx(), slot.as_ref());
-            let position = indexes
+            let position = choices
                 .iter()
-                .position(|index| *index == chosen)
+                .position(|choice| choice.index == chosen)
                 .unwrap_or(0);
-            let shown = labels.get(position).cloned().unwrap_or_default();
+            let shown = choices
+                .get(position)
+                .map(|choice| choice.label.clone())
+                .unwrap_or_default();
             let mut picked = position;
+            let icons: Vec<Option<egui::TextureHandle>> = choices
+                .iter()
+                .map(|choice| self.choice_icon(ui.ctx(), choice))
+                .collect();
             egui::Frame::NONE
                 .fill(egui::Color32::WHITE)
                 .inner_margin(egui::Margin::same(6))
@@ -295,20 +308,39 @@ impl HotkeyApp {
                             ui.add_space(THUMB);
                         }
                         egui::ComboBox::from_id_salt(name)
-                            .width(360.0)
+                            .width(280.0)
                             .selected_text(shown)
                             .show_ui(ui, |ui| {
-                                for (index, label) in labels.iter().enumerate() {
-                                    ui.selectable_value(&mut picked, index, label);
+                                for (index, choice) in choices.iter().enumerate() {
+                                    ui.horizontal(|ui| {
+                                        if let Some(icon) =
+                                            icons.get(index).and_then(Option::as_ref)
+                                        {
+                                            ui.add(
+                                                egui::Image::new(icon)
+                                                    .fit_to_exact_size(egui::vec2(28.0, 28.0)),
+                                            );
+                                        } else {
+                                            ui.add_space(28.0);
+                                        }
+                                        ui.selectable_value(&mut picked, index, &choice.label);
+                                    });
                                 }
                             });
+                        if chosen != 0 && ui.button(tr(&lang, "preview")).clicked() {
+                            pinned = Some(chosen);
+                        }
                     });
                 });
             ui.add_space(4.0);
             if picked != position {
-                let index = indexes.get(picked).copied().unwrap_or(0);
+                let index = choices.get(picked).map(|choice| choice.index).unwrap_or(0);
                 self.set_assign(name, index);
             }
+        }
+        if pinned.is_some() {
+            self.stage_pin = pinned;
+            self.stage_dismissed = None;
         }
     }
 
@@ -544,22 +576,112 @@ impl HotkeyApp {
         }
     }
 
+    fn sync_stage_dismiss(&mut self) {
+        let held = self.listener.held();
+        if self.stage_dismissed.is_some() && self.stage_dismissed != held {
+            self.stage_dismissed = None;
+        }
+    }
+
+    fn stage_index(&self) -> Option<i64> {
+        let assign = normalize_assign(self.settings.get("fkey_assign"));
+        let held = self.listener.held();
+        let from_key = held.as_deref().and_then(|name| {
+            if self.stage_dismissed.as_deref() == Some(name) {
+                return None;
+            }
+            let index = assign.get(name).copied().unwrap_or(0);
+            if (1..=crate::SLOT_COUNT).contains(&index) {
+                Some(index)
+            } else {
+                None
+            }
+        });
+        from_key.or(self
+            .stage_pin
+            .filter(|index| (1..=crate::SLOT_COUNT).contains(index)))
+    }
+
+    fn show_stage(&mut self, ctx: &egui::Context) {
+        let Some(index) = self.stage_index() else {
+            return;
+        };
+        let profile = active_profile(&self.settings, &self.paths.config_dir);
+        let Some(card) = stage_card(index, &profile, &self.paths.config_dir) else {
+            return;
+        };
+        let texture = self.texture_for_path(ctx, &card.thumb);
+        let name = card.name;
+        let lang = self.lang.clone();
+        let mut dismiss = false;
+        ctx.show_viewport_immediate(
+            egui::ViewportId::from_hash_of("expression-stage"),
+            egui::ViewportBuilder::default()
+                .with_title(&name)
+                .with_fullscreen(true),
+            |ctx, _class| {
+                if ctx.input(|input| input.viewport().close_requested()) {
+                    dismiss = true;
+                }
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    ui.vertical_centered(|ui| {
+                        ui.add_space(24.0);
+                        ui.label(egui::RichText::new(&name).strong().size(42.0).color(PINK));
+                        ui.add_space(16.0);
+                        if let Some(texture) = &texture {
+                            let side = ui.available_width().clamp(240.0, 640.0);
+                            ui.add(
+                                egui::Image::new(texture)
+                                    .fit_to_exact_size(egui::vec2(side, side))
+                                    .corner_radius(12.0),
+                            );
+                        }
+                        ui.add_space(16.0);
+                        if ui.button(tr(&lang, "stage_close")).clicked() {
+                            dismiss = true;
+                        }
+                    });
+                });
+            },
+        );
+        if dismiss {
+            self.stage_pin = None;
+            self.stage_dismissed = self.listener.held();
+        }
+    }
+
+    fn choice_icon(&mut self, ctx: &egui::Context, choice: &Choice) -> Option<egui::TextureHandle> {
+        if !choice.thumb.is_empty() {
+            return self.texture_for_path(ctx, &choice.thumb);
+        }
+        if choice.index == 0 {
+            None
+        } else {
+            Some(self.generic_texture(ctx))
+        }
+    }
+
+    fn texture_for_path(&mut self, ctx: &egui::Context, path: &str) -> Option<egui::TextureHandle> {
+        if path.is_empty() {
+            return None;
+        }
+        if let Some(texture) = self.textures.get(path) {
+            return Some(texture.clone());
+        }
+        let bytes = std::fs::read(path).ok()?;
+        let texture = texture_from_png(ctx, path, &bytes)?;
+        self.textures.insert(path.to_string(), texture.clone());
+        Some(texture)
+    }
+
     fn thumb_texture(
         &mut self,
         ctx: &egui::Context,
         slot: Option<&Slot>,
     ) -> Option<egui::TextureHandle> {
         let slot = slot?;
-        if !slot.thumb.is_empty() {
-            if let Some(texture) = self.textures.get(&slot.thumb) {
-                return Some(texture.clone());
-            }
-            if let Ok(bytes) = std::fs::read(&slot.thumb) {
-                if let Some(texture) = texture_from_png(ctx, &slot.thumb, &bytes) {
-                    self.textures.insert(slot.thumb.clone(), texture.clone());
-                    return Some(texture);
-                }
-            }
+        if let Some(texture) = self.texture_for_path(ctx, &slot.thumb) {
+            return Some(texture);
         }
         Some(self.generic_texture(ctx))
     }
@@ -642,10 +764,16 @@ impl eframe::App for HotkeyApp {
         self.capture_ui_shot(ctx);
         self.poll_tray(ctx);
         self.poll_avatar();
+        self.sync_stage_dismiss();
+        if self.shot.is_none() {
+            self.show_stage(ctx);
+        }
         if self.shot.is_some() {
             ctx.request_repaint();
         }
-        ctx.request_repaint_after(Duration::from_millis(200));
+        let quick = self.stage_index().is_some() || self.listener.held().is_some();
+        let wait = if quick { 50 } else { 200 };
+        ctx.request_repaint_after(Duration::from_millis(wait));
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
@@ -661,23 +789,31 @@ impl eframe::App for HotkeyApp {
     }
 }
 
-fn choice_labels(
-    lang: &str,
-    profile: &crate::profile::Profile,
-    paths: &AppPaths,
-) -> (Vec<String>, Vec<i64>) {
-    let mut labels = vec![tr(lang, "unassigned").to_string()];
-    let mut indexes = vec![0];
+struct Choice {
+    label: String,
+    index: i64,
+    thumb: String,
+}
+
+fn choice_labels(lang: &str, profile: &crate::profile::Profile, paths: &AppPaths) -> Vec<Choice> {
+    let mut choices = vec![Choice {
+        label: tr(lang, "unassigned").to_string(),
+        index: 0,
+        thumb: String::new(),
+    }];
     for expr in &profile.expressions {
         let slot = expression_slot(expr.index, profile, &paths.config_dir);
-        let label = slot
+        let (label, thumb) = slot
             .as_ref()
-            .map(|item| item.label.clone())
-            .unwrap_or_else(|| format!("Expression{}", expr.index));
-        labels.push(format!("{}  {label}", expr.index));
-        indexes.push(expr.index);
+            .map(|item| (item.label.clone(), item.thumb.clone()))
+            .unwrap_or_else(|| (format!("Expression{}", expr.index), String::new()));
+        choices.push(Choice {
+            label: format!("{}  {label}", expr.index),
+            index: expr.index,
+            thumb,
+        });
     }
-    (labels, indexes)
+    choices
 }
 
 /// egui paints only the fonts registered here. It does not consult Meiryo,
@@ -799,6 +935,8 @@ mod tests {
             "tray_start",
             "tray_stop",
             "tray_quit",
+            "preview",
+            "stage_close",
         ] {
             lines.push(tr("ja", key).to_string());
         }

@@ -39,6 +39,15 @@ pub struct Slot {
     pub osc: String,
 }
 
+/// What the fullscreen expression card draws: the display name, and the
+/// thumbnail when that PNG is on disk.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StageCard {
+    pub index: i64,
+    pub name: String,
+    pub thumb: String,
+}
+
 #[derive(Clone, Debug)]
 pub struct ImportResult {
     pub profile: Profile,
@@ -250,6 +259,32 @@ pub fn save_profile(profile: &Profile, root: &Path) -> Result<Profile, String> {
     }
     fs::rename(&tmp, &path).map_err(|err| err.to_string())?;
     Ok(normalized)
+}
+
+pub fn stage_card(index: i64, profile: &Profile, root: &Path) -> Option<StageCard> {
+    if !(1..=SLOT_COUNT).contains(&index) {
+        return None;
+    }
+    let Some(expr) = profile.expressions.iter().find(|item| item.index == index) else {
+        return Some(StageCard {
+            index,
+            name: format!("Expression{index}"),
+            thumb: String::new(),
+        });
+    };
+    let path = profile_thumb_path(profile, expr, root);
+    let thumb = if !path.is_empty() && Path::new(&path).is_file() {
+        path
+    } else {
+        String::new()
+    };
+    let trimmed = expr.name.trim();
+    let name = if trimmed.is_empty() {
+        format!("Expression{index}")
+    } else {
+        trimmed.to_string()
+    };
+    Some(StageCard { index, name, thumb })
 }
 
 pub fn expression_slot(index: i64, profile: &Profile, root: &Path) -> Option<Slot> {
@@ -539,9 +574,54 @@ fn non_empty(value: Option<&Value>, fallback: &str) -> String {
     }
 }
 
+/// 1×1 PNG used by the walkthrough and the stage-card test.
+#[cfg(any(test, feature = "emulate"))]
+pub(crate) const STAGE_PNG: &[u8] = &[
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
+    0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41, 0x54, 0x08, 0xD7, 0x63, 0xF8, 0xCF, 0xC0, 0x00,
+    0x00, 0x00, 0x03, 0x00, 0x01, 0x00, 0x05, 0xFE, 0x02, 0xFE, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45,
+    0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+];
+
 fn json_i64(value: &Value) -> Option<i64> {
     value
         .as_i64()
         .or_else(|| value.as_u64().and_then(|number| i64::try_from(number).ok()))
         .or_else(|| value.as_str().and_then(|text| text.trim().parse().ok()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{profile_root, stage_card, Expression, Profile, STAGE_PNG};
+    use std::fs;
+    use std::path::Path;
+
+    #[test]
+    fn stage_card_shows_the_japanese_name_and_thumbnail() {
+        let dir = tempfile::tempdir().expect("temp");
+        let profile = Profile {
+            id: "avtr_smile".into(),
+            name: "笑顔アバター".into(),
+            blueprint_id: "avtr_smile".into(),
+            expressions: vec![Expression {
+                index: 1,
+                name: "笑顔".into(),
+                parameter: "GrinA".into(),
+                osc: "/avatar/parameters/GrinA".into(),
+                kind: "bool".into(),
+                thumb: "thumbs/1.png".into(),
+            }],
+        };
+        let thumbs = profile_root(dir.path()).join(&profile.id).join("thumbs");
+        fs::create_dir_all(&thumbs).expect("thumbs");
+        fs::write(thumbs.join("1.png"), STAGE_PNG).expect("png");
+        let card = stage_card(1, &profile, dir.path()).expect("card");
+        assert_eq!(card.name, "笑顔");
+        assert!(Path::new(&card.thumb).is_file());
+        assert!(card.thumb.ends_with("1.png"));
+        let missing = stage_card(2, &profile, dir.path()).expect("empty slot");
+        assert_eq!(missing.name, "Expression2");
+        assert!(missing.thumb.is_empty());
+    }
 }

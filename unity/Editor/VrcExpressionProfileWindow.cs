@@ -12,28 +12,48 @@ namespace VrcExpressionHotkeys.EditorTools
     /// </summary>
     public class VrcExpressionProfileWindow : EditorWindow
     {
-        private GameObject _avatar;
-        private string _avatarId = "";
-        private string _avatarName = "Avatar";
-        private readonly List<ProfileDocument.Row> _rows = new List<ProfileDocument.Row>();
-        private Vector2 _scroll;
+        class Candidate
+        {
+            public AnimationClip clip;
+            public string displayName = "";
+            public string kind = "";
+            public string reason = "";
+            public bool suggested;
+            public bool include;
+            public int slot;
+            public Texture2D thumb;
+            public string thumbPath = "";
+        }
+
+        GameObject _avatar;
+        string _avatarId = "";
+        string _avatarName = "Avatar";
+        readonly List<Candidate> _found = new List<Candidate>();
+        ExpressionScan.Result _scan;
+        string _status = "";
+        Vector2 _scroll;
 
         [MenuItem("Tools/VRChat Expression Hotkeys/Avatar Profile")]
         public static void ShowWindow()
         {
             var window = GetWindow<VrcExpressionProfileWindow>("Expression Profile");
-            window.minSize = new Vector2(560, 420);
+            window.minSize = new Vector2(640, 520);
             window.Show();
         }
 
-        private void OnGUI()
+        void OnDisable()
+        {
+            ClearThumbs();
+        }
+
+        void OnGUI()
         {
             EditorGUILayout.HelpBox(
                 "Free edition: 4 expressions (Shift+F1 through F4).\n" +
-                "1. Select the avatar (a VRChat avatar descriptor if the SDK is installed, otherwise any Animator).\n" +
-                "2. Name each expression. Suggest fills the first 4 parameters and clip names.\n" +
-                "3. Generate previews. The avatar must be in the open scene.\n" +
-                "4. Export a profile folder. Indexes above 4 are left out.",
+                "表情を探す: face clips from the FX controller and the avatar folder.\n" +
+                "Blinks, visemes, mouth resets, hand-only poses, empty clips, and DefaultFace are listed with a reason. Restore puts one back.\n" +
+                "Display names can be Japanese. Install adds Expression1..4 bools and FX layers above hand gestures, matching Write Defaults, after a sync-bit check.\n" +
+                "A backup is kept outside Assets. 元に戻す copies it back. The same install does not add a second copy.",
                 MessageType.Info);
 
             _avatar = (GameObject)EditorGUILayout.ObjectField("Avatar", _avatar, typeof(GameObject), true);
@@ -44,60 +64,79 @@ namespace VrcExpressionHotkeys.EditorTools
             }
             _avatarName = EditorGUILayout.TextField("Display name", _avatarName);
             _avatarId = EditorGUILayout.TextField("Avatar / blueprint ID", _avatarId);
+            if (!string.IsNullOrEmpty(_status))
+                EditorGUILayout.HelpBox(_status, MessageType.None);
 
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Suggest from avatar"))
-                Suggest();
-            if (GUILayout.Button("Add expression"))
-            {
-                if (_rows.Count >= ProfileDocument.SlotCount)
-                {
-                    EditorUtility.DisplayDialog(
-                        "Expression Profile",
-                        "The free edition keeps " + ProfileDocument.SlotCount + " expressions.",
-                        "OK");
-                }
-                else
-                {
-                    int next = _rows.Count + 1;
-                    _rows.Add(MakeRow(next, "Expression" + next));
-                }
-            }
-            GUILayout.EndHorizontal();
+            if (GUILayout.Button("Find expressions / 表情を探す", GUILayout.Height(28)))
+                FindExpressions();
 
             _scroll = GUILayout.BeginScrollView(_scroll);
-            for (int i = 0; i < _rows.Count; i++)
-                DrawRow(i);
+            for (int i = 0; i < _found.Count; i++)
+                DrawCandidate(i);
             GUILayout.EndScrollView();
 
-            if (GUILayout.Button("Generate previews (256)", GUILayout.Height(28)))
-                GeneratePreviews();
-            if (GUILayout.Button("Export profile folder", GUILayout.Height(28)))
-                ExportPack();
+            if (GUILayout.Button("Install and export / FX に入れて書き出す", GUILayout.Height(28)))
+                InstallAndExport();
+            EditorGUI.BeginDisabledGroup(!ExpressionInstall.HasBackup());
+            if (GUILayout.Button("Restore backup / 元に戻す", GUILayout.Height(24)))
+                RestoreBackup();
+            EditorGUI.EndDisabledGroup();
         }
 
-        private void DrawRow(int index)
+        void DrawCandidate(int index)
         {
-            var row = _rows[index];
+            var item = _found[index];
             GUILayout.BeginVertical("box");
             GUILayout.BeginHorizontal();
-            row.index = Mathf.Clamp(
-                EditorGUILayout.IntField("Index", row.index), 1, ProfileDocument.SlotCount);
-            if (GUILayout.Button("Remove", GUILayout.Width(70)))
+            if (item.thumb != null)
+                GUILayout.Label(item.thumb, GUILayout.Width(72), GUILayout.Height(72));
+            else
+                GUILayout.Label(item.include ? "(no preview)" : "", GUILayout.Width(72), GUILayout.Height(72));
+            GUILayout.BeginVertical();
+            item.displayName = EditorGUILayout.TextField("Name", item.displayName);
+            if (item.include)
             {
-                _rows.RemoveAt(index);
-                GUIUtility.ExitGUI();
+                int next = EditorGUILayout.IntPopup(
+                    "Slot",
+                    item.slot,
+                    new[] { "(none)", "Shift+F1", "Shift+F2", "Shift+F3", "Shift+F4" },
+                    new[] { 0, 1, 2, 3, 4 });
+                if (next != item.slot)
+                    AssignSlot(item, next);
+                if (GUILayout.Button("Exclude / 除外", GUILayout.Width(140)))
+                {
+                    item.include = false;
+                    AssignSlot(item, 0);
+                }
             }
+            else
+            {
+                EditorGUILayout.LabelField("Excluded", item.reason);
+                if (GUILayout.Button("Restore / 戻す", GUILayout.Width(140)))
+                {
+                    item.include = true;
+                    RenderOne(item);
+                }
+            }
+            GUILayout.EndVertical();
             GUILayout.EndHorizontal();
-            row.name = EditorGUILayout.TextField("Name", row.name);
-            row.parameter = EditorGUILayout.TextField("Parameter", row.parameter);
-            row.osc = EditorGUILayout.TextField("OSC address", row.osc);
-            row.clip = (AnimationClip)EditorGUILayout.ObjectField(
-                "Preview clip", row.clip, typeof(AnimationClip), false);
             GUILayout.EndVertical();
         }
 
-        private void PullId()
+        void AssignSlot(Candidate item, int slot)
+        {
+            if (slot > 0)
+            {
+                for (int i = 0; i < _found.Count; i++)
+                {
+                    if (_found[i] != item && _found[i].slot == slot)
+                        _found[i].slot = 0;
+                }
+            }
+            item.slot = slot;
+        }
+
+        void PullId()
         {
             if (_avatar == null)
                 return;
@@ -109,7 +148,7 @@ namespace VrcExpressionHotkeys.EditorTools
                 _avatarId = ProfileDocument.Sanitize(_avatar.name);
         }
 
-        private void Suggest()
+        void FindExpressions()
         {
             if (_avatar == null)
             {
@@ -117,107 +156,90 @@ namespace VrcExpressionHotkeys.EditorTools
                 return;
             }
             PullId();
-            var seen = new HashSet<string>();
-            var suggested = new List<string>();
-            foreach (var name in VrcOptional.TryExpressionParameterNames(_avatar))
+            ClearThumbs();
+            _found.Clear();
+            _scan = ExpressionScan.Gather(_avatar);
+            int included = 0;
+            int slot = 1;
+            try
             {
-                if (seen.Add(name))
-                    suggested.Add(name);
-            }
-            var animator = _avatar.GetComponentInChildren<Animator>();
-            if (animator != null)
-            {
-                foreach (var parameter in animator.parameters)
+                for (int i = 0; i < _scan.entries.Count; i++)
                 {
-                    if (parameter.type != AnimatorControllerParameterType.Bool
-                        && parameter.type != AnimatorControllerParameterType.Int)
-                        continue;
-                    if (seen.Add(parameter.name))
-                        suggested.Add(parameter.name);
-                }
-                var controller = animator.runtimeAnimatorController;
-                if (controller != null)
-                {
-                    foreach (var clip in controller.animationClips)
+                    var entry = _scan.entries[i];
+                    var candidate = new Candidate
                     {
-                        if (clip != null && seen.Add(clip.name))
-                            suggested.Add(clip.name);
-                    }
-                }
-            }
-            if (suggested.Count == 0)
-            {
-                EditorUtility.DisplayDialog(
-                    "Expression Profile",
-                    "No expression parameters or clips were found. Add rows by hand.",
-                    "OK");
-                return;
-            }
-            _rows.Clear();
-            int index = 1;
-            foreach (var name in suggested)
-            {
-                var row = MakeRow(index, name);
-                if (animator != null && animator.runtimeAnimatorController != null)
-                {
-                    foreach (var clip in animator.runtimeAnimatorController.animationClips)
+                        clip = entry.clip,
+                        displayName = entry.clip != null ? entry.clip.name : entry.verdict.name,
+                        kind = entry.verdict.kind,
+                        reason = entry.verdict.reason,
+                        suggested = entry.verdict.include,
+                        include = entry.verdict.include
+                    };
+                    if (candidate.include && slot <= ProfileDocument.SlotCount)
                     {
-                        if (clip != null && clip.name == name)
-                        {
-                            row.clip = clip;
-                            break;
-                        }
+                        candidate.slot = slot;
+                        slot++;
+                        included++;
                     }
+                    _found.Add(candidate);
                 }
-                _rows.Add(row);
-                index++;
-                if (index > ProfileDocument.SlotCount)
-                    break;
+                for (int i = 0; i < _found.Count; i++)
+                {
+                    if (_found[i].include)
+                        RenderOne(_found[i]);
+                }
             }
+            finally
+            {
+                EditorUtility.ClearProgressBar();
+            }
+            string bits = _scan.syncedBits.HasValue ? _scan.syncedBits.Value.ToString() : "unknown";
+            string wd = _scan.writeDefaults ? "on" : "off";
+            _status = included + " expressions, " + (_found.Count - included) + " excluded. "
+                + "Write Defaults " + wd + ". Synced bits " + bits
+                + " (4 bools need 4 more, limit " + ExpressionRules.SyncLimit + ")."
+                + (VrcOptional.SdkCompiled ? " VRChat SDK detected." : "")
+                + (string.IsNullOrEmpty(_scan.notice) ? "" : " " + _scan.notice);
         }
 
-        private static ProfileDocument.Row MakeRow(int index, string name)
+        void RenderOne(Candidate item)
         {
-            return new ProfileDocument.Row
-            {
-                index = index,
-                name = name,
-                parameter = name,
-                osc = "/avatar/parameters/" + name
-            };
-        }
-
-        private void GeneratePreviews()
-        {
-            if (_avatar == null)
-            {
-                EditorUtility.DisplayDialog(
-                    "Expression Profile",
-                    "Open the avatar in the scene and assign it here. Previews are rendered from that object.",
-                    "OK");
+            if (_avatar == null || item.clip == null)
                 return;
-            }
-            string folder = EditorUtility.SaveFolderPanel("Preview folder", "", "thumbs");
-            if (string.IsNullOrEmpty(folder))
-                return;
+            string folder = Path.Combine(Path.GetTempPath(), "VREmoKeyThumbs");
             Directory.CreateDirectory(folder);
-            int written = 0;
-            foreach (var row in _rows)
+            string path = Path.Combine(folder, ProfileDocument.Sanitize(item.clip.name) + ".png");
+            var pose = ExpressionPreview.Capture(_avatar);
+            bool wrote = false;
+            try
             {
-                if (row.clip == null)
-                    continue;
-                string path = Path.Combine(folder, row.index + ".png");
-                if (ExpressionPreview.TryRender(_avatar, row.clip, path, 256))
-                    written++;
+                wrote = ExpressionPreview.TryRender(_avatar, item.clip, path, 256);
             }
-            EditorUtility.DisplayDialog(
-                "Expression Profile",
-                written + " preview PNG(s) written. Rows without a clip were skipped.",
-                "OK");
+            finally
+            {
+                ExpressionPreview.Restore(pose);
+            }
+            if (!wrote)
+                return;
+            if (item.thumb != null)
+                DestroyImmediate(item.thumb);
+            var image = new Texture2D(2, 2, TextureFormat.RGB24, false);
+            if (!image.LoadImage(File.ReadAllBytes(path)))
+            {
+                DestroyImmediate(image);
+                return;
+            }
+            item.thumb = image;
+            item.thumbPath = path;
         }
 
-        private void ExportPack()
+        void InstallAndExport()
         {
+            if (_scan == null || _scan.controller == null)
+            {
+                EditorUtility.DisplayDialog("Expression Profile", "Find expressions on an avatar with an FX controller first.", "OK");
+                return;
+            }
             if (string.IsNullOrEmpty(_avatarId))
                 PullId();
             if (string.IsNullOrEmpty(ProfileDocument.Sanitize(_avatarId)))
@@ -225,27 +247,117 @@ namespace VrcExpressionHotkeys.EditorTools
                 EditorUtility.DisplayDialog("Expression Profile", "Enter an avatar ID.", "OK");
                 return;
             }
+            var chosen = Chosen();
+            if (chosen.Count == 0)
+            {
+                EditorUtility.DisplayDialog("Expression Profile", "Assign at least one expression to Shift+F1..F4.", "OK");
+                return;
+            }
             string folder = EditorUtility.SaveFolderPanel(
                 "Export profile folder", "", ProfileDocument.Sanitize(_avatarId));
             if (string.IsNullOrEmpty(folder))
                 return;
-            Directory.CreateDirectory(Path.Combine(folder, "thumbs"));
-            foreach (var row in _rows)
+            var request = new ExpressionInstall.Request
             {
-                row.thumb = "";
-                if (row.clip == null || _avatar == null || row.index < 1)
-                    continue;
-                string png = Path.Combine(folder, "thumbs", row.index + ".png");
-                if (ExpressionPreview.TryRender(_avatar, row.clip, png, 256))
-                    row.thumb = "thumbs/" + row.index + ".png";
+                controller = _scan.controller,
+                expressionParameters = _scan.expressionParameters,
+                controllerFact = _scan.controllerFact,
+                expressionFacts = _scan.expressionFacts
+            };
+            for (int i = 0; i < chosen.Count; i++)
+            {
+                request.names.Add(string.IsNullOrEmpty(chosen[i].displayName) ? chosen[i].clip.name : chosen[i].displayName);
+                request.clips.Add(chosen[i].clip);
+                request.slots.Add(chosen[i].slot);
+            }
+            var plan = ExpressionInstall.Apply(request);
+            if (!plan.ok)
+            {
+                EditorUtility.DisplayDialog("Expression Profile", plan.error, "OK");
+                return;
+            }
+            var rows = new List<ProfileDocument.Row>();
+            Directory.CreateDirectory(Path.Combine(folder, "thumbs"));
+            var pose = _avatar != null ? ExpressionPreview.Capture(_avatar) : null;
+            try
+            {
+                for (int i = 0; i < chosen.Count; i++)
+                {
+                    int index = chosen[i].slot;
+                    string parameter = ExpressionRules.ParameterName(index);
+                    var row = new ProfileDocument.Row
+                    {
+                        index = index,
+                        name = request.names[i],
+                        parameter = parameter,
+                        osc = ExpressionRules.OscAddress(parameter),
+                        clip = chosen[i].clip
+                    };
+                    string png = Path.Combine(folder, "thumbs", index + ".png");
+                    bool wrote = _avatar != null && chosen[i].clip != null
+                        && ExpressionPreview.TryRender(_avatar, chosen[i].clip, png, 256);
+                    if (!wrote && !string.IsNullOrEmpty(chosen[i].thumbPath) && File.Exists(chosen[i].thumbPath))
+                    {
+                        File.Copy(chosen[i].thumbPath, png, true);
+                        wrote = true;
+                    }
+                    if (wrote)
+                        row.thumb = "thumbs/" + index + ".png";
+                    rows.Add(row);
+                }
+            }
+            finally
+            {
+                if (pose != null)
+                    ExpressionPreview.Restore(pose);
             }
             string json = ProfileDocument.Build(
-                ProfileDocument.Sanitize(_avatarId), _avatarName, _avatarId, _rows);
+                ProfileDocument.Sanitize(_avatarId), _avatarName, _avatarId, rows);
             File.WriteAllText(Path.Combine(folder, "profile.json"), json);
+            _scan.controllerFact = ExpressionScan.Describe(_scan.controller);
+            _scan.expressionFacts = ExpressionScan.DescribeParameters(_scan.expressionParameters);
+            _scan.writeDefaults = _scan.controllerFact.writeOn > _scan.controllerFact.writeOff;
             EditorUtility.DisplayDialog(
                 "Expression Profile",
-                "Wrote " + folder + "\nImport that folder (or a zip of it) in the desktop app.",
+                "Installed " + plan.layers.Count + " layer(s) and wrote " + folder
+                + "\nImport that folder (or a zip of it) in the desktop app.",
                 "OK");
+        }
+
+        List<Candidate> Chosen()
+        {
+            var chosen = new List<Candidate>();
+            for (int slot = 1; slot <= ProfileDocument.SlotCount; slot++)
+            {
+                for (int i = 0; i < _found.Count; i++)
+                {
+                    if (_found[i].include && _found[i].slot == slot && _found[i].clip != null)
+                    {
+                        chosen.Add(_found[i]);
+                        break;
+                    }
+                }
+            }
+            return chosen;
+        }
+
+        void RestoreBackup()
+        {
+            int count = ExpressionInstall.Restore();
+            EditorUtility.DisplayDialog(
+                "Expression Profile",
+                count > 0 ? "Restored " + count + " asset(s) from VREmoKeyBackup." : "No backup was found.",
+                "OK");
+        }
+
+        void ClearThumbs()
+        {
+            for (int i = 0; i < _found.Count; i++)
+            {
+                if (_found[i].thumb != null)
+                    DestroyImmediate(_found[i].thumb);
+                _found[i].thumb = null;
+            }
         }
     }
 
@@ -312,6 +424,67 @@ namespace VrcExpressionHotkeys.EditorTools
 
     public static class ExpressionPreview
     {
+        public class Pose
+        {
+            public Transform root;
+            public Vector3 position;
+            public Quaternion rotation;
+            public Vector3 scale;
+            public bool animatorEnabled;
+            public Animator animator;
+            public readonly List<SkinnedMeshRenderer> renderers = new List<SkinnedMeshRenderer>();
+            public readonly List<float[]> weights = new List<float[]>();
+        }
+
+        public static Pose Capture(GameObject avatar)
+        {
+            var pose = new Pose();
+            if (avatar == null)
+                return pose;
+            pose.root = avatar.transform;
+            pose.position = avatar.transform.localPosition;
+            pose.rotation = avatar.transform.localRotation;
+            pose.scale = avatar.transform.localScale;
+            pose.animator = avatar.GetComponentInChildren<Animator>();
+            if (pose.animator != null)
+                pose.animatorEnabled = pose.animator.enabled;
+            foreach (var renderer in avatar.GetComponentsInChildren<SkinnedMeshRenderer>(true))
+            {
+                int count = renderer.sharedMesh != null ? renderer.sharedMesh.blendShapeCount : 0;
+                var values = new float[count];
+                for (int i = 0; i < count; i++)
+                    values[i] = renderer.GetBlendShapeWeight(i);
+                pose.renderers.Add(renderer);
+                pose.weights.Add(values);
+            }
+            return pose;
+        }
+
+        public static void Restore(Pose pose)
+        {
+            if (pose == null)
+                return;
+            for (int i = 0; i < pose.renderers.Count; i++)
+            {
+                var renderer = pose.renderers[i];
+                if (renderer == null)
+                    continue;
+                var values = pose.weights[i];
+                int count = renderer.sharedMesh != null ? renderer.sharedMesh.blendShapeCount : 0;
+                int limit = Mathf.Min(count, values.Length);
+                for (int shape = 0; shape < limit; shape++)
+                    renderer.SetBlendShapeWeight(shape, values[shape]);
+            }
+            if (pose.animator != null)
+                pose.animator.enabled = pose.animatorEnabled;
+            if (pose.root != null)
+            {
+                pose.root.localPosition = pose.position;
+                pose.root.localRotation = pose.rotation;
+                pose.root.localScale = pose.scale;
+            }
+        }
+
         public static bool TryRender(GameObject avatar, AnimationClip clip, string pngPath, int size)
         {
             if (avatar == null || clip == null || string.IsNullOrEmpty(pngPath) || size < 1)

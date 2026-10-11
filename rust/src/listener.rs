@@ -23,6 +23,7 @@ type Detect = Box<dyn FnMut() -> Option<bool>>;
 struct Shared {
     last: Mutex<String>,
     focused: Mutex<Option<bool>>,
+    held: Mutex<Option<String>>,
 }
 
 pub struct ExpressionListener {
@@ -47,6 +48,7 @@ impl ExpressionListener {
             shared: Arc::new(Shared {
                 last: Mutex::new(String::new()),
                 focused: Mutex::new(None),
+                held: Mutex::new(None),
             }),
             stop: Arc::new(AtomicBool::new(false)),
             thread: Mutex::new(None),
@@ -65,6 +67,15 @@ impl ExpressionListener {
     pub fn last(&self) -> String {
         self.shared
             .last
+            .lock()
+            .unwrap_or_else(|err| err.into_inner())
+            .clone()
+    }
+
+    /// The F-key whose expression is currently on. Release clears it.
+    pub fn held(&self) -> Option<String> {
+        self.shared
+            .held
             .lock()
             .unwrap_or_else(|err| err.into_inner())
             .clone()
@@ -96,6 +107,11 @@ impl ExpressionListener {
         if let Some(handle) = handle {
             let _ = handle.join();
         }
+        *self
+            .shared
+            .held
+            .lock()
+            .unwrap_or_else(|err| err.into_inner()) = None;
     }
 }
 
@@ -176,12 +192,22 @@ fn emit(
                 continue;
             };
             osc.send_bool(address, down);
+            note_held(shared, &name, down);
             let state = if down { "DOWN" } else { "UP" };
             let line = format!("Shift+{name} {state}");
             *shared.last.lock().unwrap_or_else(|err| err.into_inner()) = line.clone();
             *shared.focused.lock().unwrap_or_else(|err| err.into_inner()) = gate.last_state;
             log_line(paths, &format!("{line} -> {address}"));
         }
+    }
+}
+
+fn note_held(shared: &Shared, name: &str, down: bool) {
+    let mut held = shared.held.lock().unwrap_or_else(|err| err.into_inner());
+    if down {
+        *held = Some(name.to_string());
+    } else if held.as_deref() == Some(name) {
+        *held = None;
     }
 }
 
@@ -361,4 +387,24 @@ pub fn run_listen(paths: &AppPaths) -> i32 {
     avatar.stop();
     listener.stop();
     0
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::note_held;
+    use crate::listener::ExpressionListener;
+    use crate::paths::AppPaths;
+
+    #[test]
+    fn held_follows_press_and_ignores_another_release() {
+        let listener = ExpressionListener::new(AppPaths::in_dir(Path::new(".")));
+        note_held(&listener.shared, "F2", true);
+        assert_eq!(listener.held().as_deref(), Some("F2"));
+        note_held(&listener.shared, "F1", false);
+        assert_eq!(listener.held().as_deref(), Some("F2"));
+        note_held(&listener.shared, "F2", false);
+        assert!(listener.held().is_none());
+    }
 }
