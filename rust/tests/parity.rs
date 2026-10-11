@@ -409,6 +409,47 @@ fn profile_label_needs_the_png_and_backslash_thumbs() {
     let _ = fs::remove_dir_all(root);
 }
 
+/// `ProfileDocument.Build` writes the display name and `ExpressionN` separately.
+/// The F1 combo is `{index}  {label}`. The label stays `ExpressionN` until the
+/// thumbnail file from that export is actually on disk.
+#[test]
+fn unity_profile_json_shows_a_japanese_name_only_with_the_png() {
+    let json = concat!(
+        "{\n",
+        "  \"id\": \"mizuki\",\n",
+        "  \"name\": \"瑞希\",\n",
+        "  \"blueprint_id\": \"avtr_mizuki\",\n",
+        "  \"expressions\": [\n",
+        "      {\"index\": 1, \"name\": \"笑顔\", \"parameter\": \"Expression1\", ",
+        "\"osc\": \"/avatar/parameters/Expression1\", \"type\": \"bool\", ",
+        "\"thumb\": \"thumbs/1.png\"}\n",
+        "  ]\n",
+        "}\n",
+    );
+    let root = scratch();
+    let paths = AppPaths::in_dir(&root);
+    let src = root.join("export");
+    fs::create_dir_all(src.join("thumbs")).unwrap();
+    fs::write(src.join("profile.json"), json).unwrap();
+
+    let imported = import_profile_pack(&src.join("profile.json"), &paths).unwrap();
+    assert_eq!(imported.profile.expressions[0].name, "笑顔");
+    assert_eq!(imported.profile.expressions[0].parameter, "Expression1");
+    let slot = expression_slot(1, &imported.profile, &root).unwrap();
+    assert_eq!(format!("{}  {}", slot.index, slot.label), "1  Expression1");
+    assert!(slot.thumb.is_empty());
+    assert_eq!(slot.osc, "/avatar/parameters/Expression1");
+
+    png(&src.join("thumbs/1.png"));
+    let imported = import_profile_pack(&src.join("profile.json"), &paths).unwrap();
+    let slot = expression_slot(1, &imported.profile, &root).unwrap();
+    assert_eq!(slot.label, "笑顔");
+    assert_eq!(format!("{}  {}", slot.index, slot.label), "1  笑顔");
+    assert_eq!(slot.osc, "/avatar/parameters/Expression1");
+    assert!(Path::new(&slot.thumb).is_file());
+    let _ = fs::remove_dir_all(root);
+}
+
 #[test]
 fn import_zip_skips_indexes_above_four_and_rejects_parent_paths() {
     let root = scratch();

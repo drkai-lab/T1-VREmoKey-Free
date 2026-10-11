@@ -330,6 +330,39 @@ class ProfileTest(unittest.TestCase):
             os.path.normpath(slot["thumb"]),
             os.path.join(self.root, "avatars", "smile", "thumbs", "3.png"))
 
+    def test_unity_profile_json_shows_a_japanese_name_only_with_the_png(self):
+        # Same text ProfileDocument.Build writes: display name, parameter ExpressionN.
+        text = (
+            "{\n"
+            "  \"id\": \"mizuki\",\n"
+            "  \"name\": \"瑞希\",\n"
+            "  \"blueprint_id\": \"avtr_mizuki\",\n"
+            "  \"expressions\": [\n"
+            "      {\"index\": 1, \"name\": \"笑顔\", \"parameter\": \"Expression1\", "
+            "\"osc\": \"/avatar/parameters/Expression1\", \"type\": \"bool\", "
+            "\"thumb\": \"thumbs/1.png\"}\n"
+            "  ]\n"
+            "}\n"
+        )
+        src = os.path.join(self.root, "export")
+        os.makedirs(os.path.join(src, "thumbs"))
+        with open(os.path.join(src, "profile.json"), "w", encoding="utf-8") as handle:
+            handle.write(text)
+        loaded = veh.import_profile_pack(os.path.join(src, "profile.json"), self.root)
+        self.assertEqual(loaded["expressions"][0]["name"], "笑顔")
+        self.assertEqual(loaded["expressions"][0]["parameter"], "Expression1")
+        slot = veh.expression_slot(1, loaded, self.root)
+        self.assertEqual(f"{slot['index']}  {slot['label']}", "1  Expression1")
+        self.assertEqual(slot["thumb"], "")
+        self.assertEqual(slot["osc"], "/avatar/parameters/Expression1")
+        _png(os.path.join(src, "thumbs", "1.png"))
+        loaded = veh.import_profile_pack(os.path.join(src, "profile.json"), self.root)
+        slot = veh.expression_slot(1, loaded, self.root)
+        self.assertEqual(slot["label"], "笑顔")
+        self.assertEqual(f"{slot['index']}  {slot['label']}", "1  笑顔")
+        self.assertEqual(slot["osc"], "/avatar/parameters/Expression1")
+        self.assertTrue(os.path.isfile(slot["thumb"]))
+
     def test_backslash_thumb_path(self):
         profile = veh.default_profile()
         profile["id"] = "smile"
