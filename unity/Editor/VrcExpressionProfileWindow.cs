@@ -17,8 +17,6 @@ namespace VrcExpressionHotkeys.EditorTools
             public AnimationClip clip;
             public string displayName = "";
             public string kind = "";
-            public string reason = "";
-            public bool suggested;
             public bool include;
             public int slot;
             public Texture2D thumb;
@@ -30,14 +28,14 @@ namespace VrcExpressionHotkeys.EditorTools
         string _avatarName = "Avatar";
         readonly List<Candidate> _found = new List<Candidate>();
         ExpressionScan.Result _scan;
-        string _status = "";
+        bool _scanned;
         Vector2 _scroll;
 
         [MenuItem("Tools/VRChat Expression Hotkeys/Avatar Profile")]
         public static void ShowWindow()
         {
-            var window = GetWindow<VrcExpressionProfileWindow>("Expression Profile");
-            window.minSize = new Vector2(640, 520);
+            var window = GetWindow<VrcExpressionProfileWindow>(EditorLocale.T("window.title"));
+            window.minSize = new Vector2(680, 560);
             window.Show();
         }
 
@@ -48,39 +46,92 @@ namespace VrcExpressionHotkeys.EditorTools
 
         void OnGUI()
         {
-            EditorGUILayout.HelpBox(
-                "Free edition: 4 expressions (Shift+F1 through F4).\n" +
-                "表情を探す: face clips from the FX controller and the avatar folder.\n" +
-                "Blinks, visemes, mouth resets, hand-only poses, empty clips, and DefaultFace are listed with a reason. Restore puts one back.\n" +
-                "Display names can be Japanese. Install adds Expression1..4 bools and FX layers above hand gestures, matching Write Defaults, after a sync-bit check.\n" +
-                "A backup is kept outside Assets. 元に戻す copies it back. The same install does not add a second copy.",
-                MessageType.Info);
-
-            _avatar = (GameObject)EditorGUILayout.ObjectField("Avatar", _avatar, typeof(GameObject), true);
-            if (GUILayout.Button("Use selected object"))
+            EditorLocale.BeginWindow();
+            try
             {
-                _avatar = Selection.activeGameObject;
-                PullId();
+                titleContent = new GUIContent(EditorLocale.T("window.title"));
+                DrawLanguage();
+                EditorGUILayout.HelpBox(EditorLocale.T("help.body"), MessageType.Info);
+
+                _avatar = (GameObject)EditorGUILayout.ObjectField(
+                    Tip("field.avatar", "tooltip.avatar"), _avatar, typeof(GameObject), true);
+                if (GUILayout.Button(Tip("button.use_selected", "tooltip.use_selected")))
+                {
+                    _avatar = Selection.activeGameObject;
+                    PullId();
+                }
+                _avatarName = EditorGUILayout.TextField(Tip("field.display_name", "tooltip.display_name"), _avatarName);
+                _avatarId = EditorGUILayout.TextField(Tip("field.avatar_id", "tooltip.avatar_id"), _avatarId);
+                if (_scanned)
+                    EditorGUILayout.HelpBox(StatusText(), MessageType.None);
+
+                if (GUILayout.Button(Tip("button.find", "tooltip.find"), GUILayout.Height(28)))
+                    FindExpressions();
+
+                _scroll = GUILayout.BeginScrollView(_scroll);
+                for (int i = 0; i < _found.Count; i++)
+                    DrawCandidate(i);
+                GUILayout.EndScrollView();
+
+                if (GUILayout.Button(Tip("button.install", "tooltip.install"), GUILayout.Height(28)))
+                    InstallAndExport();
+                EditorGUI.BeginDisabledGroup(!ExpressionInstall.HasBackup());
+                if (GUILayout.Button(Tip("button.restore_backup", "tooltip.restore_backup"), GUILayout.Height(24)))
+                    RestoreBackup();
+                EditorGUI.EndDisabledGroup();
             }
-            _avatarName = EditorGUILayout.TextField("Display name", _avatarName);
-            _avatarId = EditorGUILayout.TextField("Avatar / blueprint ID", _avatarId);
-            if (!string.IsNullOrEmpty(_status))
-                EditorGUILayout.HelpBox(_status, MessageType.None);
+            finally
+            {
+                EditorLocale.EndWindow();
+            }
+        }
 
-            if (GUILayout.Button("Find expressions / 表情を探す", GUILayout.Height(28)))
-                FindExpressions();
+        static GUIContent Tip(string labelKey, string tooltipKey)
+        {
+            return new GUIContent(EditorLocale.T(labelKey), EditorLocale.T(tooltipKey));
+        }
 
-            _scroll = GUILayout.BeginScrollView(_scroll);
+        void DrawLanguage()
+        {
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.Label(new GUIContent(EditorLocale.T("label.language"), EditorLocale.T("tooltip.lang")), GUILayout.Width(64));
+            LangButton("ja", "lang.ja");
+            LangButton("en", "lang.en");
+            LangButton("ko", "lang.ko");
+            GUILayout.FlexibleSpace();
+            EditorGUILayout.EndHorizontal();
+        }
+
+        void LangButton(string code, string key)
+        {
+            bool selected = EditorLocale.Current == code;
+            var style = new GUIStyle(EditorStyles.toolbarButton);
+            if (selected)
+                style.fontStyle = FontStyle.Bold;
+            if (GUILayout.Button(new GUIContent(EditorLocale.T(key), EditorLocale.T("tooltip.lang")), style, GUILayout.Width(88))
+                && !selected)
+                EditorLocale.Set(code);
+        }
+
+        string StatusText()
+        {
+            int included = 0;
             for (int i = 0; i < _found.Count; i++)
-                DrawCandidate(i);
-            GUILayout.EndScrollView();
-
-            if (GUILayout.Button("Install and export / FX に入れて書き出す", GUILayout.Height(28)))
-                InstallAndExport();
-            EditorGUI.BeginDisabledGroup(!ExpressionInstall.HasBackup());
-            if (GUILayout.Button("Restore backup / 元に戻す", GUILayout.Height(24)))
-                RestoreBackup();
-            EditorGUI.EndDisabledGroup();
+            {
+                if (_found[i].include)
+                    included++;
+            }
+            string wd = _scan != null && _scan.writeDefaults ? EditorLocale.T("wd.on") : EditorLocale.T("wd.off");
+            string bits = _scan != null && _scan.syncedBits.HasValue
+                ? _scan.syncedBits.Value.ToString()
+                : EditorLocale.T("bits.unknown");
+            string text = EditorLocale.F(
+                "status.summary", included, _found.Count - included, wd, bits, ExpressionRules.SyncLimit);
+            if (VrcOptional.SdkCompiled)
+                text += " " + EditorLocale.T("status.sdk");
+            if (_scan != null && !string.IsNullOrEmpty(_scan.notice))
+                text += " " + EditorLocale.Present(_scan.notice);
+            return text;
         }
 
         void DrawCandidate(int index)
@@ -91,19 +142,19 @@ namespace VrcExpressionHotkeys.EditorTools
             if (item.thumb != null)
                 GUILayout.Label(item.thumb, GUILayout.Width(72), GUILayout.Height(72));
             else
-                GUILayout.Label(item.include ? "(no preview)" : "", GUILayout.Width(72), GUILayout.Height(72));
+                GUILayout.Label(item.include ? EditorLocale.T("preview.none") : "", GUILayout.Width(72), GUILayout.Height(72));
             GUILayout.BeginVertical();
-            item.displayName = EditorGUILayout.TextField("Name", item.displayName);
+            item.displayName = EditorGUILayout.TextField(Tip("field.name", "tooltip.name"), item.displayName);
             if (item.include)
             {
                 int next = EditorGUILayout.IntPopup(
-                    "Slot",
+                    new GUIContent(EditorLocale.T("field.slot")),
                     item.slot,
-                    new[] { "(none)", "Shift+F1", "Shift+F2", "Shift+F3", "Shift+F4" },
+                    new[] { EditorLocale.T("slot.none"), "Shift+F1", "Shift+F2", "Shift+F3", "Shift+F4" },
                     new[] { 0, 1, 2, 3, 4 });
                 if (next != item.slot)
                     AssignSlot(item, next);
-                if (GUILayout.Button("Exclude / 除外", GUILayout.Width(140)))
+                if (GUILayout.Button(Tip("button.exclude", "tooltip.exclude"), GUILayout.Width(140)))
                 {
                     item.include = false;
                     AssignSlot(item, 0);
@@ -111,8 +162,8 @@ namespace VrcExpressionHotkeys.EditorTools
             }
             else
             {
-                EditorGUILayout.LabelField("Excluded", item.reason);
-                if (GUILayout.Button("Restore / 戻す", GUILayout.Width(140)))
+                EditorGUILayout.LabelField(EditorLocale.T("field.excluded"), EditorStrings.Get(EditorLocale.Current, "reason." + item.kind));
+                if (GUILayout.Button(Tip("button.restore_clip", "tooltip.restore_clip"), GUILayout.Width(140)))
                 {
                     item.include = true;
                     RenderOne(item);
@@ -152,14 +203,13 @@ namespace VrcExpressionHotkeys.EditorTools
         {
             if (_avatar == null)
             {
-                EditorUtility.DisplayDialog("Expression Profile", "Assign an avatar first.", "OK");
+                EditorUtility.DisplayDialog(EditorLocale.T("window.title"), EditorLocale.T("dialog.need_avatar"), EditorLocale.T("button.ok"));
                 return;
             }
             PullId();
             ClearThumbs();
             _found.Clear();
             _scan = ExpressionScan.Gather(_avatar);
-            int included = 0;
             int slot = 1;
             try
             {
@@ -171,15 +221,12 @@ namespace VrcExpressionHotkeys.EditorTools
                         clip = entry.clip,
                         displayName = entry.clip != null ? entry.clip.name : entry.verdict.name,
                         kind = entry.verdict.kind,
-                        reason = entry.verdict.reason,
-                        suggested = entry.verdict.include,
                         include = entry.verdict.include
                     };
                     if (candidate.include && slot <= ProfileDocument.SlotCount)
                     {
                         candidate.slot = slot;
                         slot++;
-                        included++;
                     }
                     _found.Add(candidate);
                 }
@@ -193,13 +240,7 @@ namespace VrcExpressionHotkeys.EditorTools
             {
                 EditorUtility.ClearProgressBar();
             }
-            string bits = _scan.syncedBits.HasValue ? _scan.syncedBits.Value.ToString() : "unknown";
-            string wd = _scan.writeDefaults ? "on" : "off";
-            _status = included + " expressions, " + (_found.Count - included) + " excluded. "
-                + "Write Defaults " + wd + ". Synced bits " + bits
-                + " (4 bools need 4 more, limit " + ExpressionRules.SyncLimit + ")."
-                + (VrcOptional.SdkCompiled ? " VRChat SDK detected." : "")
-                + (string.IsNullOrEmpty(_scan.notice) ? "" : " " + _scan.notice);
+            _scanned = true;
         }
 
         void RenderOne(Candidate item)
@@ -237,24 +278,24 @@ namespace VrcExpressionHotkeys.EditorTools
         {
             if (_scan == null || _scan.controller == null)
             {
-                EditorUtility.DisplayDialog("Expression Profile", "Find expressions on an avatar with an FX controller first.", "OK");
+                EditorUtility.DisplayDialog(EditorLocale.T("window.title"), EditorLocale.T("dialog.need_fx"), EditorLocale.T("button.ok"));
                 return;
             }
             if (string.IsNullOrEmpty(_avatarId))
                 PullId();
             if (string.IsNullOrEmpty(ProfileDocument.Sanitize(_avatarId)))
             {
-                EditorUtility.DisplayDialog("Expression Profile", "Enter an avatar ID.", "OK");
+                EditorUtility.DisplayDialog(EditorLocale.T("window.title"), EditorLocale.T("dialog.need_id"), EditorLocale.T("button.ok"));
                 return;
             }
             var chosen = Chosen();
             if (chosen.Count == 0)
             {
-                EditorUtility.DisplayDialog("Expression Profile", "Assign at least one expression to Shift+F1..F4.", "OK");
+                EditorUtility.DisplayDialog(EditorLocale.T("window.title"), EditorLocale.T("dialog.need_slot"), EditorLocale.T("button.ok"));
                 return;
             }
             string folder = EditorUtility.SaveFolderPanel(
-                "Export profile folder", "", ProfileDocument.Sanitize(_avatarId));
+                EditorLocale.T("dialog.save_title"), "", ProfileDocument.Sanitize(_avatarId));
             if (string.IsNullOrEmpty(folder))
                 return;
             var request = new ExpressionInstall.Request
@@ -273,7 +314,7 @@ namespace VrcExpressionHotkeys.EditorTools
             var plan = ExpressionInstall.Apply(request);
             if (!plan.ok)
             {
-                EditorUtility.DisplayDialog("Expression Profile", plan.error, "OK");
+                EditorUtility.DisplayDialog(EditorLocale.T("window.title"), EditorLocale.Present(plan.error), EditorLocale.T("button.ok"));
                 return;
             }
             var rows = new List<ProfileDocument.Row>();
@@ -318,10 +359,9 @@ namespace VrcExpressionHotkeys.EditorTools
             _scan.expressionFacts = ExpressionScan.DescribeParameters(_scan.expressionParameters);
             _scan.writeDefaults = _scan.controllerFact.writeOn > _scan.controllerFact.writeOff;
             EditorUtility.DisplayDialog(
-                "Expression Profile",
-                "Installed " + plan.layers.Count + " layer(s) and wrote " + folder
-                + "\nImport that folder (or a zip of it) in the desktop app.",
-                "OK");
+                EditorLocale.T("window.title"),
+                EditorLocale.F("dialog.installed", plan.layers.Count, folder),
+                EditorLocale.T("button.ok"));
         }
 
         List<Candidate> Chosen()
@@ -345,9 +385,9 @@ namespace VrcExpressionHotkeys.EditorTools
         {
             int count = ExpressionInstall.Restore();
             EditorUtility.DisplayDialog(
-                "Expression Profile",
-                count > 0 ? "Restored " + count + " asset(s) from VREmoKeyBackup." : "No backup was found.",
-                "OK");
+                EditorLocale.T("window.title"),
+                count > 0 ? EditorLocale.F("dialog.restored", count) : EditorLocale.T("dialog.no_backup"),
+                EditorLocale.T("button.ok"));
         }
 
         void ClearThumbs()
@@ -528,7 +568,7 @@ namespace VrcExpressionHotkeys.EditorTools
             }
             catch (Exception error)
             {
-                Debug.LogWarning("[ExpressionHotkeys] Preview failed: " + error.Message);
+                Debug.LogWarning("[ExpressionHotkeys] " + EditorLocale.F("log.preview_failed", error.Message));
                 return false;
             }
             finally

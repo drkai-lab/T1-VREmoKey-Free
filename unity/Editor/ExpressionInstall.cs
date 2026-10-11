@@ -38,7 +38,7 @@ namespace VrcExpressionHotkeys.EditorTools
             if (request.controller == null)
             {
                 plan.ok = false;
-                plan.error = "FX コントローラーがありません";
+                plan.error = "err:no_fx";
                 return plan;
             }
             string controllerPath = AssetDatabase.GetAssetPath(request.controller);

@@ -33,7 +33,11 @@ The command name stays `vrc-expression-hotkeys`, and settings stay in the same d
    `profile.json` plus `thumbs/*.png`. A second run updates the same
    layer. **Restore backup** copies the original assets back. The editor
    tools use reflection, so a project without the VRChat SDK still
-   compiles. Zip that folder if you want a single file.
+   compiles. The window switches among Japanese, English, and Korean from
+   the buttons at the top, without restarting the editor. The choice is
+   saved. The first visit follows the OS or editor language, and uses
+   Japanese when that language is unknown. Expression names are not
+   translated. Zip that folder if you want a single file.
 2. In this app, import the pack. Pick the avatar in the dropdown, or let
    VRChat switch it. VRChat sends `/avatar/change` to `127.0.0.1:9001` by
    default. The listen port is configurable. If that port is already taken

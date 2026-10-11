@@ -1,0 +1,13 @@
+EditorHangul.ttf is a subset of WenQuanYi Micro Hei.
+
+Copyright 2008-2009 The WenQuanYi Project Board of Trustees
+Copyright 2006-2008 Google Corporation
+Copyright 2006-2008 Steve Matteson, Ascender Corp.
+
+Licensed under the Apache License, Version 2.0. The license text is
+EditorHangul.LICENSE.txt.
+
+Unity 2022 draws editor text with a Latin font that has no Hangul. The
+profile window uses an OS font that contains Hangul when one is installed
+(Malgun Gothic, Apple SD Gothic Neo, Noto Sans CJK KR, and the other names
+in EditorLocale). This file is the fallback when none of those fonts exist.

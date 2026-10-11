@@ -43,6 +43,10 @@ You can also copy this `unity/` folder into the project's `Packages` folder.
 ## Workflow
 
 1. `Tools > VRChat Expression Hotkeys > Avatar Profile`.
+   - The buttons at the top switch Japanese, English, and Korean immediately.
+     The choice is stored for the next time the editor opens. The first
+     visit follows the OS or editor language, otherwise Japanese.
+     Expression names are left as typed.
    - Put the avatar in the scene and assign it. With the SDK installed,
      the blueprint id is read by reflection from a `blueprintId` field.
      Otherwise type an id.

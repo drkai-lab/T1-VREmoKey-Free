@@ -1,1 +1,3 @@
 *.meta text eol=lf
+*.ttf binary
+*.otf binary

@@ -39,7 +39,7 @@ namespace VrcExpressionHotkeys.EditorTools
             var result = new Result();
             if (avatar == null)
             {
-                result.notice = "アバターを選んでください";
+                result.notice = "err:need_avatar";
                 return result;
             }
             result.controller = FindFx(avatar);
@@ -63,7 +63,7 @@ namespace VrcExpressionHotkeys.EditorTools
             }
             else
             {
-                result.notice = "FX コントローラーが見つかりません。フォルダ内のクリップだけ探します。";
+                result.notice = "err:no_fx_scan";
             }
             result.expressionFacts = DescribeParameters(result.expressionParameters);
             result.syncedBits = result.expressionFacts == null

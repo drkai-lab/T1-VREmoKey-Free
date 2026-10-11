@@ -315,7 +315,7 @@ namespace VrcExpressionHotkeys.EditorTools
             };
             if (chosen != null && chosen.Count > SlotCount)
             {
-                refused.error = "無料版は 4 スロットまでです";
+                refused.error = "err:slot_limit";
                 return refused;
             }
             int writeOn = controller != null ? controller.writeOn : 0;
@@ -333,7 +333,7 @@ namespace VrcExpressionHotkeys.EditorTools
                 int slot = slots != null ? slots[offset - 1] : offset;
                 if (slot < 1 || slot > SlotCount || !usedSlots.Add(slot))
                 {
-                    refused.error = "無料版は 4 スロットまでです";
+                    refused.error = "err:slot_limit";
                     return refused;
                 }
                 string pname = ParameterName(slot);
@@ -341,7 +341,7 @@ namespace VrcExpressionHotkeys.EditorTools
                 string exprType = ExprType(expressionParameters, pname);
                 if ((animatorType != null && animatorType != "bool") || (exprType != null && exprType != "bool"))
                 {
-                    refused.error = pname + " は bool ではありません";
+                    refused.error = "err:not_bool:" + pname;
                     refused.writeDefaults = writeDefaults;
                     return refused;
                 }
@@ -356,7 +356,7 @@ namespace VrcExpressionHotkeys.EditorTools
                 }
                 if (existing != null && !existing.ours)
                 {
-                    refused.error = pname + " というレイヤーが既にあるため追加しません";
+                    refused.error = "err:foreign:" + pname;
                     refused.writeDefaults = writeDefaults;
                     return refused;
                 }
@@ -383,7 +383,7 @@ namespace VrcExpressionHotkeys.EditorTools
             int? bits = expressionParameters == null ? (int?)null : SyncedBits(expressionParameters);
             if (bits.HasValue && bits.Value + addedBits > SyncLimit)
             {
-                refused.error = "同期ビットが " + SyncLimit + " を超えます (現在 " + bits.Value + "、追加 " + addedBits + ")";
+                refused.error = "err:sync:" + SyncLimit + ":" + bits.Value + ":" + addedBits;
                 refused.syncedBits = bits;
                 refused.addedBits = addedBits;
                 refused.writeDefaults = writeDefaults;
