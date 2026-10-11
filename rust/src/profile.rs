@@ -278,13 +278,11 @@ pub fn stage_card(index: i64, profile: &Profile, root: &Path) -> Option<StageCar
     } else {
         String::new()
     };
-    let trimmed = expr.name.trim();
-    let name = if trimmed.is_empty() {
-        format!("Expression{index}")
-    } else {
-        trimmed.to_string()
-    };
-    Some(StageCard { index, name, thumb })
+    Some(StageCard {
+        index,
+        name: expression_label(index, &expr.name),
+        thumb,
+    })
 }
 
 pub fn expression_slot(index: i64, profile: &Profile, root: &Path) -> Option<Slot> {
@@ -307,22 +305,21 @@ pub fn expression_slot(index: i64, profile: &Profile, root: &Path) -> Option<Slo
     } else {
         String::new()
     };
-    let label = if thumb.is_empty() {
-        label
-    } else {
-        let name = expr.name.trim();
-        if name.is_empty() {
-            format!("Expression{index}")
-        } else {
-            name.to_string()
-        }
-    };
     Some(Slot {
         index,
-        label,
+        label: expression_label(index, &expr.name),
         thumb,
         osc: expr.osc.clone(),
     })
+}
+
+fn expression_label(index: i64, name: &str) -> String {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        format!("Expression{index}")
+    } else {
+        trimmed.to_string()
+    }
 }
 
 pub fn active_profile(settings: &Value, root: &Path) -> Profile {
@@ -615,11 +612,20 @@ mod tests {
         };
         let thumbs = profile_root(dir.path()).join(&profile.id).join("thumbs");
         fs::create_dir_all(&thumbs).expect("thumbs");
+        let card = stage_card(1, &profile, dir.path()).expect("card");
+        assert_eq!(card.name, "笑顔");
+        assert!(card.thumb.is_empty());
         fs::write(thumbs.join("1.png"), STAGE_PNG).expect("png");
         let card = stage_card(1, &profile, dir.path()).expect("card");
         assert_eq!(card.name, "笑顔");
         assert!(Path::new(&card.thumb).is_file());
         assert!(card.thumb.ends_with("1.png"));
+        let mut blank = profile.clone();
+        blank.expressions[0].name = "  ".into();
+        blank.expressions[0].thumb.clear();
+        let card = stage_card(1, &blank, dir.path()).expect("blank name");
+        assert_eq!(card.name, "Expression1");
+        assert!(card.thumb.is_empty());
         let missing = stage_card(2, &profile, dir.path()).expect("empty slot");
         assert_eq!(missing.name, "Expression2");
         assert!(missing.thumb.is_empty());

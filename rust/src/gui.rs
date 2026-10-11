@@ -610,7 +610,10 @@ impl HotkeyApp {
         let Some(card) = stage_card(index, &profile, &self.paths.config_dir) else {
             return;
         };
-        let texture = self.texture_for_path(ctx, &card.thumb);
+        let texture = match self.texture_for_path(ctx, &card.thumb) {
+            Some(texture) => texture,
+            None => self.generic_texture(ctx),
+        };
         let name = card.name;
         let lang = self.lang.clone();
         let mut dismiss = false;
@@ -628,14 +631,12 @@ impl HotkeyApp {
                         ui.add_space(24.0);
                         ui.label(egui::RichText::new(&name).strong().size(42.0).color(PINK));
                         ui.add_space(16.0);
-                        if let Some(texture) = &texture {
-                            let side = ui.available_width().clamp(240.0, 640.0);
-                            ui.add(
-                                egui::Image::new(texture)
-                                    .fit_to_exact_size(egui::vec2(side, side))
-                                    .corner_radius(12.0),
-                            );
-                        }
+                        let side = ui.available_width().clamp(240.0, 640.0);
+                        ui.add(
+                            egui::Image::new(&texture)
+                                .fit_to_exact_size(egui::vec2(side, side))
+                                .corner_radius(12.0),
+                        );
                         ui.add_space(16.0);
                         if ui.button(tr(&lang, "stage_close")).clicked() {
                             dismiss = true;

@@ -25,7 +25,7 @@ use vrc_expression_hotkeys::osc::{encode_osc_string, parse_osc_packet, OscSender
 use vrc_expression_hotkeys::paths::AppPaths;
 use vrc_expression_hotkeys::profile::{
     default_profile, expression_slot, import_profile_pack, load_profile, note_avatar_change,
-    profile_thumb_path, save_profile, Profile,
+    profile_thumb_path, save_profile, stage_card, Profile,
 };
 use vrc_expression_hotkeys::settings::{
     default_settings, hotkeys_for, load_settings, save_settings, to_pretty,
@@ -377,7 +377,7 @@ fn settings_keep_unknown_keys_and_replace_corrupt_files() {
 }
 
 #[test]
-fn profile_label_needs_the_png_and_backslash_thumbs() {
+fn profile_label_keeps_the_name_without_a_png() {
     let root = scratch();
     let mut profile = default_profile();
     profile.id = "smile".into();
@@ -390,9 +390,14 @@ fn profile_label_needs_the_png_and_backslash_thumbs() {
     settings["active_avatar"] = json!("smile");
     settings["fkey_assign"]["F3"] = json!(3);
     let slot = expression_slot(3, &load_profile("smile", &root).unwrap(), &root).unwrap();
-    assert_eq!(slot.label, "Expression3");
+    assert_eq!(slot.label, "Grin");
     assert!(slot.thumb.is_empty());
     assert_eq!(slot.osc, "/avatar/parameters/Grin");
+    let mut blank = load_profile("smile", &root).unwrap();
+    blank.expressions[2].name = "  ".into();
+    let slot = expression_slot(3, &blank, &root).unwrap();
+    assert_eq!(slot.label, "Expression3");
+    assert!(slot.thumb.is_empty());
     png(&root.join("avatars/smile/thumbs/3.png"));
     let slot = expression_slot(3, &load_profile("smile", &root).unwrap(), &root).unwrap();
     assert_eq!(slot.label, "Grin");
@@ -410,10 +415,9 @@ fn profile_label_needs_the_png_and_backslash_thumbs() {
 }
 
 /// `ProfileDocument.Build` writes the display name and `ExpressionN` separately.
-/// The F1 combo is `{index}  {label}`. The label stays `ExpressionN` until the
-/// thumbnail file from that export is actually on disk.
+/// The F1 combo is `{index}  {label}`. A missing PNG clears the thumbnail only.
 #[test]
-fn unity_profile_json_shows_a_japanese_name_only_with_the_png() {
+fn unity_profile_json_shows_the_japanese_name_without_a_png() {
     let json = concat!(
         "{\n",
         "  \"id\": \"mizuki\",\n",
@@ -422,7 +426,10 @@ fn unity_profile_json_shows_a_japanese_name_only_with_the_png() {
         "  \"expressions\": [\n",
         "      {\"index\": 1, \"name\": \"笑顔\", \"parameter\": \"Expression1\", ",
         "\"osc\": \"/avatar/parameters/Expression1\", \"type\": \"bool\", ",
-        "\"thumb\": \"thumbs/1.png\"}\n",
+        "\"thumb\": \"thumbs/1.png\"},\n",
+        "      {\"index\": 2, \"name\": \"\", \"parameter\": \"Expression2\", ",
+        "\"osc\": \"/avatar/parameters/Expression2\", \"type\": \"bool\", ",
+        "\"thumb\": \"\"}\n",
         "  ]\n",
         "}\n",
     );
@@ -436,9 +443,19 @@ fn unity_profile_json_shows_a_japanese_name_only_with_the_png() {
     assert_eq!(imported.profile.expressions[0].name, "笑顔");
     assert_eq!(imported.profile.expressions[0].parameter, "Expression1");
     let slot = expression_slot(1, &imported.profile, &root).unwrap();
-    assert_eq!(format!("{}  {}", slot.index, slot.label), "1  Expression1");
+    assert_eq!(slot.label, "笑顔");
+    assert_eq!(format!("{}  {}", slot.index, slot.label), "1  笑顔");
     assert!(slot.thumb.is_empty());
     assert_eq!(slot.osc, "/avatar/parameters/Expression1");
+    let card = stage_card(1, &imported.profile, &root).unwrap();
+    assert_eq!(card.name, "笑顔");
+    assert!(card.thumb.is_empty());
+    let unnamed = expression_slot(2, &imported.profile, &root).unwrap();
+    assert_eq!(unnamed.label, "Expression2");
+    assert!(unnamed.thumb.is_empty());
+    let card = stage_card(2, &imported.profile, &root).unwrap();
+    assert_eq!(card.name, "Expression2");
+    assert!(card.thumb.is_empty());
 
     png(&src.join("thumbs/1.png"));
     let imported = import_profile_pack(&src.join("profile.json"), &paths).unwrap();

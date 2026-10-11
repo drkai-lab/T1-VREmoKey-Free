@@ -320,9 +320,14 @@ class ProfileTest(unittest.TestCase):
         settings["active_avatar"] = "smile"
         settings["fkey_assign"]["F3"] = 3
         slot = veh.expression_slot(3, veh.active_profile(settings, self.root), self.root)
-        self.assertEqual(slot["label"], "Expression3")
+        self.assertEqual(slot["label"], "Grin")
         self.assertEqual(slot["thumb"], "")
         self.assertEqual(slot["osc"], "/avatar/parameters/Grin")
+        blank = veh.load_profile("smile", self.root)
+        blank["expressions"][2]["name"] = "   "
+        slot = veh.expression_slot(3, blank, self.root)
+        self.assertEqual(slot["label"], "Expression3")
+        self.assertEqual(slot["thumb"], "")
         _png(os.path.join(self.root, "avatars", "smile", "thumbs", "3.png"))
         slot = veh.expression_slot(3, veh.load_profile("smile", self.root), self.root)
         self.assertEqual(slot["label"], "Grin")
@@ -330,7 +335,7 @@ class ProfileTest(unittest.TestCase):
             os.path.normpath(slot["thumb"]),
             os.path.join(self.root, "avatars", "smile", "thumbs", "3.png"))
 
-    def test_unity_profile_json_shows_a_japanese_name_only_with_the_png(self):
+    def test_unity_profile_json_shows_the_japanese_name_without_a_png(self):
         # Same text ProfileDocument.Build writes: display name, parameter ExpressionN.
         text = (
             "{\n"
@@ -340,7 +345,10 @@ class ProfileTest(unittest.TestCase):
             "  \"expressions\": [\n"
             "      {\"index\": 1, \"name\": \"笑顔\", \"parameter\": \"Expression1\", "
             "\"osc\": \"/avatar/parameters/Expression1\", \"type\": \"bool\", "
-            "\"thumb\": \"thumbs/1.png\"}\n"
+            "\"thumb\": \"thumbs/1.png\"},\n"
+            "      {\"index\": 2, \"name\": \"\", \"parameter\": \"Expression2\", "
+            "\"osc\": \"/avatar/parameters/Expression2\", \"type\": \"bool\", "
+            "\"thumb\": \"\"}\n"
             "  ]\n"
             "}\n"
         )
@@ -352,9 +360,13 @@ class ProfileTest(unittest.TestCase):
         self.assertEqual(loaded["expressions"][0]["name"], "笑顔")
         self.assertEqual(loaded["expressions"][0]["parameter"], "Expression1")
         slot = veh.expression_slot(1, loaded, self.root)
-        self.assertEqual(f"{slot['index']}  {slot['label']}", "1  Expression1")
+        self.assertEqual(slot["label"], "笑顔")
+        self.assertEqual(f"{slot['index']}  {slot['label']}", "1  笑顔")
         self.assertEqual(slot["thumb"], "")
         self.assertEqual(slot["osc"], "/avatar/parameters/Expression1")
+        unnamed = veh.expression_slot(2, loaded, self.root)
+        self.assertEqual(unnamed["label"], "Expression2")
+        self.assertEqual(unnamed["thumb"], "")
         _png(os.path.join(src, "thumbs", "1.png"))
         loaded = veh.import_profile_pack(os.path.join(src, "profile.json"), self.root)
         slot = veh.expression_slot(1, loaded, self.root)
