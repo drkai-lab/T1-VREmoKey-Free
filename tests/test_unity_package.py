@@ -104,6 +104,7 @@ def _assert_archives(test, unity_dir, tarball, unitypackage):
         meta_names.add(meta_name)
         test.assertIn(meta_name, names, rel)
         test.assertIn(meta_name, payloads)
+        test.assertNotIn(b"\r", payloads[meta_name], rel)
         if full is None:
             folders.add(rel)
             dir_members = [member for member in members if member.name == f"package/{rel}"]
@@ -130,7 +131,9 @@ def _assert_archives(test, unity_dir, tarball, unitypackage):
         test.assertTrue(path_text.startswith(prefix), path_text)
         rel = path_text[len(prefix) :]
         seen_paths.add(rel)
-        meta = up_payloads[f"{guid}/asset.meta"].decode("utf-8")
+        meta_bytes = up_payloads[f"{guid}/asset.meta"]
+        test.assertNotIn(b"\r", meta_bytes, rel)
+        meta = meta_bytes.decode("utf-8")
         test.assertIn(f"guid: {guid}\n", meta)
         if rel in folders:
             test.assertEqual(parts, {"pathname", "asset.meta"}, rel)
@@ -181,6 +184,19 @@ class PackLayoutTest(unittest.TestCase):
             dist = os.path.join(tmp, "dist")
             _seed_package(unity)
             tarball, unitypackage = pack.build(unity, dist)
+            _assert_archives(self, unity, tarball, unitypackage)
+
+    def test_crlf_meta_is_packed_as_lf(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            unity = os.path.join(tmp, "unity")
+            _seed_package(unity)
+            for rel, _full in pack.assets(unity):
+                path = pack.meta_file(unity, rel)
+                with open(path, "rb") as handle:
+                    data = handle.read().replace(b"\n", b"\r\n")
+                with open(path, "wb") as handle:
+                    handle.write(data)
+            tarball, unitypackage = pack.build(unity, os.path.join(tmp, "dist"))
             _assert_archives(self, unity, tarball, unitypackage)
 
     def test_missing_meta_is_refused(self):

@@ -111,15 +111,18 @@ def read_meta(unity_dir, rel):
         raise SystemExit(f"missing .meta for {rel}")
     with open(path, "rb") as handle:
         data = handle.read()
+    text = data.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
+    if text and not text.endswith("\n"):
+        text += "\n"
     guid = ""
-    for line in data.decode("utf-8").splitlines():
+    for line in text.splitlines():
         if line.startswith("guid:"):
             guid = line.split(":", 1)[1].strip()
             break
     expected = guid_for(rel)
     if guid != expected:
         raise SystemExit(f"guid for {rel} is {guid!r}, expected {expected}")
-    return guid, data
+    return guid, text.encode("utf-8")
 
 
 def pathname_for(package_name, rel):
@@ -154,6 +157,9 @@ def build(unity_dir, dist_dir):
             arcname = f"package/{rel}"
             if full is None:
                 _add_dir(archive, arcname)
+            elif rel.endswith(".meta"):
+                _guid, meta = read_meta(unity_dir, rel[: -len(".meta")])
+                add_bytes(archive, arcname, meta)
             else:
                 archive.add(full, arcname=arcname)
 
