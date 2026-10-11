@@ -76,6 +76,27 @@ def meta_for(relpath, guid, is_dir):
         )
     elif relpath.endswith(".asmdef"):
         body = _plain_importer("AssemblyDefinitionImporter")
+    elif relpath.endswith((".ttf", ".otf")):
+        body = (
+            "TrueTypeFontImporter:\n"
+            "  externalObjects: {}\n"
+            "  serializedVersion: 4\n"
+            "  fontSize: 16\n"
+            "  forceTextureCase: -2\n"
+            "  characterSpacing: 0\n"
+            "  characterPadding: 1\n"
+            "  includeFontData: 1\n"
+            "  fontNames: []\n"
+            "  fallbackFontReferences: []\n"
+            "  customCharacters: \n"
+            "  fontRenderingMode: 0\n"
+            "  ascentCalculationMode: 1\n"
+            "  useLegacyBoundsCalculation: 0\n"
+            "  shouldRoundAdvanceValue: 1\n"
+            "  userData: \n"
+            "  assetBundleName: \n"
+            "  assetBundleVariant: \n"
+        )
     else:
         body = _plain_importer("DefaultImporter")
     return f"fileFormatVersion: 2\nguid: {guid}\n{body}"

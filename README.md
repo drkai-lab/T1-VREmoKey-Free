@@ -15,26 +15,45 @@ The full edition, **T1-VREmoKey**, is for the T1 mini keyboard. It supports
 12 expressions, assigning them to the keyboard's own buttons, cycling them
 with the dial, and writing the keyboard's settings. It is a separate project.
 
-The command name stays `vrc-expression-hotkeys`, and settings stay in the same directories, so an existing setup keeps working. Version 2.0.3 is the Rust app. Its window title and tray name are **T1-VREmoKey-Free**. Release builds strip symbols and use link-time optimization. This public build is not obfuscated.
+The command name stays `vrc-expression-hotkeys`, and settings stay in the same directories, so an existing setup keeps working. Version 2.1.0 is the Rust app. Its window title and tray name are **T1-VREmoKey-Free**. Release builds strip symbols and use link-time optimization. This public build is not obfuscated.
 
 ## What it does
 
-1. In Unity, open `Tools > VRChat Expression Hotkeys > Avatar Profile`. Name
-   each expression, generate 256×256 face previews (the avatar must be open
-   in the scene), and export a folder of `profile.json` plus `thumbs/*.png`.
-   The editor tools use reflection, so a project without the VRChat SDK
-   still compiles. Zip that folder if you want a single file.
+1. In Unity, open `Tools > VRChat Expression Hotkeys > Avatar Profile`.
+   With the avatar in the scene, choose **Find expressions**. Clips that
+   move a face blendShape, from the FX controller and the avatar folder,
+   become candidates. Blinks, visemes, a mouth reset, hand-only poses,
+   empty clips, and a DefaultFace pose stay in the list with a reason, and
+   can be restored. Display names can be Japanese. Assign the ones you
+   keep to Shift+F1..F4. The window renders a 256×256 face thumbnail and
+   puts the avatar back afterward. **Install and export** adds the
+   `ExpressionN` bool and an FX layer for each filled slot (after hand
+   gestures, Write Defaults matched to the existing FX, refused when the
+   256 synced-bit budget would be exceeded), keeps a backup, and writes
+   `profile.json` plus `thumbs/*.png`. A second run updates the same
+   layer. **Restore backup** copies the original assets back. The editor
+   tools use reflection, so a project without the VRChat SDK still
+   compiles. The window switches among Japanese, English, and Korean from
+   the buttons at the top, without restarting the editor. The choice is
+   saved. The first visit follows the OS or editor language, and uses
+   Japanese when that language is unknown. Expression names are not
+   translated. Zip that folder if you want a single file.
 2. In this app, import the pack. Pick the avatar in the dropdown, or let
    VRChat switch it. VRChat sends `/avatar/change` to `127.0.0.1:9001` by
    default. The listen port is configurable. If that port is already taken
    the app keeps running and says so; forward `/avatar/change` with any OSC
-   router onto the port you chose.
-3. Assign each of F1..F4 to an expression. The row shows the expression
-   number, the avatar's name, and the thumbnail. A missing PNG shows a
-   generic icon and `Expression N`. Shift+F5..F12 do nothing.
+   router onto the port you chose. Switching the avatar refreshes the
+   fullscreen name and thumbnail.
+3. Assign each of F1..F4 from the thumbnail list. The row shows the key,
+   the thumbnail, and the name. **Preview fullscreen** shows that name and
+   thumbnail. A missing PNG shows a generic icon and `Expression N` on the
+   row. Shift+F5..F12 do nothing.
 4. Leave the app running. Shift+Fn sends that expression's OSC bool: TRUE
    on press, FALSE on release. Repeats are ignored. By default this happens
-   only while VRChat is the foreground app.
+   only while VRChat is the foreground app. While the key is held, the
+   fullscreen shows the expression name and thumbnail. Releasing the key
+   closes it. Closing it during the hold keeps it closed until the next
+   press.
 
 The built-in Default profile is Expression1..4. An imported profile may
 list more than four expressions. Indexes above 4 are ignored, and the
@@ -152,11 +171,11 @@ wine target/x86_64-pc-windows-gnu/debug/vrc-expression-hotkeys.exe --emulate
 The walkthrough:
 
 1. Imports two avatar profiles through the app's profile importer and writes `settings.json`.
-2. Reads them back and checks that F1 resolves to the first avatar's parameter.
+2. Reads them back and checks that F1 resolves to the first avatar's parameter. It also checks the Japanese expression name and thumbnail file the fullscreen shows.
 3. Presses and releases Shift+F1 through the platform hook (`poll` on evdev, or the low-level keyboard hook). The stand-in VRChat records bool true, then false. F1's address is `/avatar/parameters/GrinA` (24 bytes). The walkthrough checks that this packet ends the address with four NUL bytes, then the type tag `,T` padded to four bytes.
 4. Repeats the chord with the focus substitute forced off. No OSC is sent.
 5. Clears the substitute and uses the real foreground check. The chord is sent only when that check says VRChat is focused. A headless machine usually cannot name the focused window, and `when_unknown` stays `deny`, so the chord is dropped.
-6. Sends `/avatar/change` for the second avatar, checks the saved profile, then presses Shift+F1 again and expects the second parameter.
+6. Sends `/avatar/change` for the second avatar, checks the saved profile and the fullscreen card (Japanese name and thumbnail), then presses Shift+F1 again and expects the second parameter.
 
 While the walkthrough is running it listens on `127.0.0.1` for `press N`, `release N` (N is 1..4), and `focus on`, `focus off`, or `focus live`. The last chord is sent through that socket, from outside the hook thread.
 
@@ -173,6 +192,8 @@ Limits:
 ## Manual checklist
 
 - [ ] Export a profile from Unity and import it. Names and thumbnails show on F1..F4.
+- [ ] Preview fullscreen, or hold Shift+Fn, and confirm the expression name and thumbnail. Release closes the fullscreen.
+- [ ] After `/avatar/change`, the fullscreen name and thumbnail follow the new avatar.
 - [ ] Import a profile that also has expression 5 or higher. Those rows are skipped, and a notice says so. Shift+F5 does nothing.
 - [ ] Assign F3, focus VRChat, hold Shift+F3. The expression turns on. Release sends false.
 - [ ] The same chord does nothing while another app is focused.
@@ -202,9 +223,9 @@ Git has to be installed.
 4. Enter `https://github.com/drkai-lab/T1-VREmoKey-Free.git?path=unity`.
 5. Click **Add**.
 
-To pin a version, append `#v2.0.3`:
+To pin a version, append `#v2.1.0`:
 
-`https://github.com/drkai-lab/T1-VREmoKey-Free.git?path=unity#v2.0.3`
+`https://github.com/drkai-lab/T1-VREmoKey-Free.git?path=unity#v2.1.0`
 
 ## License
 

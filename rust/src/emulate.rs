@@ -573,6 +573,8 @@ fn walkthrough_body() -> Result<String, String> {
         "/avatar/parameters/GrinA",
         "/avatar/parameters/Grin",
     )?;
+    assert_stage(&paths, 1, "笑顔").map_err(|err| report.fail(format!("confirm: {err}")))?;
+    assert_stage(&paths, 2, "にやり").map_err(|err| report.fail(format!("confirm: {err}")))?;
     report.push(format!(
         "configure: imported avtr_smile avtr_wave osc={} avatar={avatar_port}",
         vrchat.port
@@ -581,6 +583,7 @@ fn walkthrough_body() -> Result<String, String> {
         "confirm: avatar=avtr_smile F1=/avatar/parameters/GrinA F2=/avatar/parameters/Grin"
             .to_string(),
     );
+    report.push("confirm: stage F1=笑顔 thumb=1.png F2=にやり thumb=2.png".to_string());
 
     set_suppress_real_keys(true);
     let listener = ExpressionListener::new(paths.clone());
@@ -715,9 +718,14 @@ fn walkthrough_body() -> Result<String, String> {
         "/avatar/parameters/Bye",
     )
     .map_err(|err| report.fail(format!("switch: {err}")))?;
+    assert_stage(&session.paths, 1, "手を振る")
+        .map_err(|err| report.fail(format!("switch: {err}")))?;
+    assert_stage(&session.paths, 2, "さようなら")
+        .map_err(|err| report.fail(format!("switch: {err}")))?;
     report.push(
         "switch: avatar=avtr_wave F1=/avatar/parameters/Wave F2=/avatar/parameters/Bye".to_string(),
     );
+    report.push("switch: stage F1=手を振る thumb=1.png F2=さようなら thumb=2.png".to_string());
 
     set_focus_fixed(true);
     expect_chord(&session, Drive::Local, 1, "/avatar/parameters/Wave")
@@ -741,13 +749,13 @@ fn walkthrough_body() -> Result<String, String> {
 fn import_two(paths: &AppPaths) -> Result<(), String> {
     let smile = avatar_profile(
         "avtr_smile",
-        "Smile Avatar",
-        &[("GrinA", "GrinA"), ("Grin", "Grin")],
+        "笑顔アバター",
+        &[("笑顔", "GrinA"), ("にやり", "Grin")],
     );
     let wave = avatar_profile(
         "avtr_wave",
-        "Wave Avatar",
-        &[("Wave", "Wave"), ("Bye", "Bye")],
+        "手振りアバター",
+        &[("手を振る", "Wave"), ("さようなら", "Bye")],
     );
     import_one(paths, &smile)?;
     import_one(paths, &wave)?;
@@ -772,7 +780,18 @@ fn import_one(paths: &AppPaths, profile: &Profile) -> Result<(), String> {
 fn write_pack(dir: &Path, profile: &Profile) -> Result<(), String> {
     fs::create_dir_all(dir).map_err(|err| err.to_string())?;
     let text = serde_json::to_string_pretty(profile).map_err(|err| err.to_string())?;
-    fs::write(dir.join("profile.json"), text).map_err(|err| err.to_string())
+    fs::write(dir.join("profile.json"), text).map_err(|err| err.to_string())?;
+    for expr in &profile.expressions {
+        if expr.thumb.is_empty() {
+            continue;
+        }
+        let thumb = dir.join("thumbs").join(format!("{}.png", expr.index));
+        if let Some(parent) = thumb.parent() {
+            fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+        }
+        fs::write(thumb, crate::profile::STAGE_PNG).map_err(|err| err.to_string())?;
+    }
+    Ok(())
 }
 
 #[cfg(any(target_os = "linux", windows))]
@@ -788,7 +807,7 @@ fn avatar_profile(id: &str, name: &str, rows: &[(&str, &str)]) -> Profile {
                 parameter: (*parameter).to_string(),
                 osc: format!("/avatar/parameters/{parameter}"),
                 kind: "bool".into(),
-                thumb: String::new(),
+                thumb: format!("thumbs/{index}.png"),
             }
         })
         .collect();
@@ -855,6 +874,25 @@ fn confirm_saved(paths: &AppPaths, avatar: &str, f1: &str, f2: &str) -> Result<(
     }
     if !resolved.enabled || !resolved.target.enabled {
         return Err("listener or focus gate is disabled".into());
+    }
+    Ok(())
+}
+
+#[cfg(any(target_os = "linux", windows))]
+fn assert_stage(paths: &AppPaths, index: i64, name: &str) -> Result<(), String> {
+    let settings = settings::load_settings(paths);
+    let profile = profile::active_profile(&settings, &paths.config_dir);
+    let card = profile::stage_card(index, &profile, &paths.config_dir)
+        .ok_or_else(|| format!("stage {index} is missing"))?;
+    if card.name != name {
+        return Err(format!("stage {index} is {}, want {name}", card.name));
+    }
+    let file = format!("{index}.png");
+    if !card.thumb.replace('\\', "/").ends_with(&file) || !Path::new(&card.thumb).is_file() {
+        return Err(format!(
+            "stage {index} thumbnail is missing ({})",
+            card.thumb
+        ));
     }
     Ok(())
 }
@@ -1118,6 +1156,8 @@ mod tests {
         println!("{report}");
         for needle in [
             "confirm:",
+            "confirm: stage F1=笑顔 thumb=1.png F2=にやり thumb=2.png",
+            "switch: stage F1=手を振る thumb=1.png F2=さようなら thumb=2.png",
             "/avatar/parameters/GrinA",
             "wire: /avatar/parameters/GrinA bytes=24 nul=4 tag=,T",
             "/avatar/parameters/Wave",

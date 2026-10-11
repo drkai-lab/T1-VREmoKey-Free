@@ -106,6 +106,20 @@ pub fn tr(lang: &str, key: &str) -> &'static str {
                 "Quit"
             }
         }
+        "preview" => {
+            if ja {
+                "全画面で見る"
+            } else {
+                "Preview fullscreen"
+            }
+        }
+        "stage_close" => {
+            if ja {
+                "閉じる"
+            } else {
+                "Close"
+            }
+        }
         "subtitle" => "VRChat Expression Hotkeys (F1-F4)",
         _ => key_fallback(key),
     }
