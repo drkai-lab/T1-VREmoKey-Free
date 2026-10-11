@@ -320,15 +320,60 @@ class ProfileTest(unittest.TestCase):
         settings["active_avatar"] = "smile"
         settings["fkey_assign"]["F3"] = 3
         slot = veh.expression_slot(3, veh.active_profile(settings, self.root), self.root)
-        self.assertEqual(slot["label"], "Expression3")
+        self.assertEqual(slot["label"], "Grin")
         self.assertEqual(slot["thumb"], "")
         self.assertEqual(slot["osc"], "/avatar/parameters/Grin")
+        blank = veh.load_profile("smile", self.root)
+        blank["expressions"][2]["name"] = "   "
+        slot = veh.expression_slot(3, blank, self.root)
+        self.assertEqual(slot["label"], "Expression3")
+        self.assertEqual(slot["thumb"], "")
         _png(os.path.join(self.root, "avatars", "smile", "thumbs", "3.png"))
         slot = veh.expression_slot(3, veh.load_profile("smile", self.root), self.root)
         self.assertEqual(slot["label"], "Grin")
         self.assertEqual(
             os.path.normpath(slot["thumb"]),
             os.path.join(self.root, "avatars", "smile", "thumbs", "3.png"))
+
+    def test_unity_profile_json_shows_the_japanese_name_without_a_png(self):
+        # Same text ProfileDocument.Build writes: display name, parameter ExpressionN.
+        text = (
+            "{\n"
+            "  \"id\": \"mizuki\",\n"
+            "  \"name\": \"瑞希\",\n"
+            "  \"blueprint_id\": \"avtr_mizuki\",\n"
+            "  \"expressions\": [\n"
+            "      {\"index\": 1, \"name\": \"笑顔\", \"parameter\": \"Expression1\", "
+            "\"osc\": \"/avatar/parameters/Expression1\", \"type\": \"bool\", "
+            "\"thumb\": \"thumbs/1.png\"},\n"
+            "      {\"index\": 2, \"name\": \"\", \"parameter\": \"Expression2\", "
+            "\"osc\": \"/avatar/parameters/Expression2\", \"type\": \"bool\", "
+            "\"thumb\": \"\"}\n"
+            "  ]\n"
+            "}\n"
+        )
+        src = os.path.join(self.root, "export")
+        os.makedirs(os.path.join(src, "thumbs"))
+        with open(os.path.join(src, "profile.json"), "w", encoding="utf-8") as handle:
+            handle.write(text)
+        loaded = veh.import_profile_pack(os.path.join(src, "profile.json"), self.root)
+        self.assertEqual(loaded["expressions"][0]["name"], "笑顔")
+        self.assertEqual(loaded["expressions"][0]["parameter"], "Expression1")
+        slot = veh.expression_slot(1, loaded, self.root)
+        self.assertEqual(slot["label"], "笑顔")
+        self.assertEqual(f"{slot['index']}  {slot['label']}", "1  笑顔")
+        self.assertEqual(slot["thumb"], "")
+        self.assertEqual(slot["osc"], "/avatar/parameters/Expression1")
+        unnamed = veh.expression_slot(2, loaded, self.root)
+        self.assertEqual(unnamed["label"], "Expression2")
+        self.assertEqual(unnamed["thumb"], "")
+        _png(os.path.join(src, "thumbs", "1.png"))
+        loaded = veh.import_profile_pack(os.path.join(src, "profile.json"), self.root)
+        slot = veh.expression_slot(1, loaded, self.root)
+        self.assertEqual(slot["label"], "笑顔")
+        self.assertEqual(f"{slot['index']}  {slot['label']}", "1  笑顔")
+        self.assertEqual(slot["osc"], "/avatar/parameters/Expression1")
+        self.assertTrue(os.path.isfile(slot["thumb"]))
 
     def test_backslash_thumb_path(self):
         profile = veh.default_profile()

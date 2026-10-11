@@ -20,7 +20,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install lint tooling
-        run: pip install ruff
+        run: pip install ruff fonttools
       - name: Lint
         run: ruff check .
       - name: Tests
@@ -58,6 +58,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Install test tooling
+        run: pip install fonttools
       - name: Tests
         run: |
           python3 tests/test_hotkeys.py

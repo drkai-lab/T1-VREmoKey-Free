@@ -46,8 +46,10 @@ The command name stays `vrc-expression-hotkeys`, and settings stay in the same d
    fullscreen name and thumbnail.
 3. Assign each of F1..F4 from the thumbnail list. The row shows the key,
    the thumbnail, and the name. **Preview fullscreen** shows that name and
-   thumbnail. A missing PNG shows a generic icon and `Expression N` on the
-   row. Shift+F5..F12 do nothing.
+   thumbnail. A missing PNG keeps the profile name on the row and on the
+   fullscreen, and shows a generic icon in place of the thumbnail. They
+   show `Expression N` only when that name is missing too. Shift+F5..F12
+   do nothing.
 4. Leave the app running. Shift+Fn sends that expression's OSC bool: TRUE
    on press, FALSE on release. Repeats are ignored. By default this happens
    only while VRChat is the foreground app. While the key is held, the
@@ -199,7 +201,7 @@ Limits:
 - [ ] The same chord does nothing while another app is focused.
 - [ ] Send `/avatar/change` with the avatar id to the listen port and confirm the dropdown switches.
 - [ ] With the listen port already taken, confirm the busy message and that the window stays open.
-- [ ] An expression with no PNG shows Expression N.
+- [ ] An expression with no PNG shows a generic icon and the profile name. `Expression N` appears only when the name is missing too.
 
 ## Unity package
 

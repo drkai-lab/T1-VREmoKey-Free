@@ -496,8 +496,7 @@ def expression_slot(index, profile, root=None):
     path = profile_thumb_path(profile, expr, root)
     thumb = path if path and os.path.isfile(path) else ""
     osc = str(expr.get("osc") or "")
-    if thumb:
-        label = str(expr.get("name") or "").strip() or label
+    label = str(expr.get("name") or "").strip() or label
     return {"index": index, "label": label, "thumb": thumb, "osc": osc}
 
 
