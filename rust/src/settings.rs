@@ -202,6 +202,18 @@ pub fn lang_of(settings: &Value) -> String {
         .to_string()
 }
 
+pub fn zoom_of(settings: &Value) -> f32 {
+    let Some(number) = settings.get("ui_zoom").and_then(Value::as_f64) else {
+        return 1.0;
+    };
+    let zoom = number as f32;
+    if (0.75..=3.0).contains(&zoom) {
+        zoom
+    } else {
+        1.0
+    }
+}
+
 fn as_index(value: &Value) -> Option<i64> {
     if let Some(number) = value.as_i64() {
         return Some(number);

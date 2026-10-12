@@ -31,7 +31,9 @@ The command name stays `vrc-expression-hotkeys`, and settings stay in the same d
    gestures, Write Defaults matched to the existing FX, refused when the
    256 synced-bit budget would be exceeded), keeps a backup, and writes
    `profile.json` plus `thumbs/*.png`. A second run updates the same
-   layer. **Restore backup** copies the original assets back. The editor
+   layer. Install asks before it changes the controller. **Restore backup**
+   asks first, keeps the current files under `VREmoKeyBackup/before-restore-<time>`,
+   then copies the original assets back. The editor
    tools use reflection, so a project without the VRChat SDK still
    compiles. The window switches among Japanese, English, and Korean from
    the buttons at the top, without restarting the editor. The choice is
@@ -91,7 +93,7 @@ The Windows executable does not need the Visual C++ redistributable.
 2. The binaries are unsigned, so SmartScreen may warn you. Click **More info**, then **Run anyway**.
 3. Optional tasks during setup (both off by default):
    - **Create a desktop icon**
-   - **Start at logon**: starts the app automatically when you sign in to Windows.
+   - **Start at logon** (ログオン時に起動 when the installer language is Japanese): starts the app automatically when you sign in to Windows.
 4. Start **T1-VREmoKey-Free** from the Start menu. You can close the window; the app stays in the tray until you choose **Quit**.
 5. Uninstall from **Settings > Apps > Installed apps**, or with the Start menu uninstall shortcut.
 

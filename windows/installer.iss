@@ -1,4 +1,4 @@
-; Inno Setup script for VRChat Expression Hotkeys (Windows 11)
+﻿; Inno Setup script for VRChat Expression Hotkeys (Windows 11)
 
 #define AppName "VRChat Expression Hotkeys"
 #define AppVersion "1.0.0"
@@ -26,10 +26,17 @@ ArchitecturesInstallIn64BitMode=x64compatible
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
+Name: "japanese"; MessagesFile: "compiler:Languages\Japanese.isl"
+
+[CustomMessages]
+english.TaskAutostart=Autostart
+english.StartAtLogon=Start at logon
+japanese.TaskAutostart=自動起動
+japanese.StartAtLogon=ログオン時に起動
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
-Name: "autostart"; Description: "Start at logon"; GroupDescription: "Autostart"; Flags: unchecked
+Name: "autostart"; Description: "{cm:StartAtLogon}"; GroupDescription: "{cm:TaskAutostart}"; Flags: unchecked
 
 [Files]
 Source: "..\dist-win\vrc-expression-hotkeys.exe"; DestDir: "{app}"; Flags: ignoreversion
