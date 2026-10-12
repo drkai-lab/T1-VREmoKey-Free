@@ -7,13 +7,14 @@ use std::time::{Duration, Instant};
 
 use evdev::{Device, EventType, KeyCode};
 
-use crate::keys::KeyEvent;
+use crate::keys::{KeyEvent, KeyProblem};
 use crate::paths::{log_line, AppPaths};
 
 pub struct LinuxKeySource {
     devices: Vec<OpenDev>,
     next_scan: Instant,
     perm_warned: bool,
+    problem: KeyProblem,
 }
 
 struct OpenDev {
@@ -27,6 +28,7 @@ impl LinuxKeySource {
             devices: Vec::new(),
             next_scan: Instant::now(),
             perm_warned: false,
+            problem: KeyProblem::Ok,
         };
         source.rescan();
         source
@@ -57,18 +59,29 @@ impl LinuxKeySource {
                 false
             }
         });
-        if !denied.is_empty() && self.devices.is_empty() && !self.perm_warned {
+        self.problem = classify_keyboards(self.devices.len(), denied.len());
+        if self.problem == KeyProblem::PermissionDenied && !self.perm_warned {
             self.perm_warned = true;
             log_line(
                 &AppPaths::system(),
                 &format!(
-                    "no keyboard is readable ({}). Add your user to the input group.",
+                    "no keyboard is readable ({}). Add your user to the input group and sign in again: sudo usermod -aG input \"$USER\"",
                     denied.join(", ")
                 ),
             );
         }
         self.next_scan = Instant::now() + Duration::from_secs(1);
         dropped
+    }
+}
+
+fn classify_keyboards(open_count: usize, denied_count: usize) -> KeyProblem {
+    if open_count > 0 {
+        KeyProblem::Ok
+    } else if denied_count > 0 {
+        KeyProblem::PermissionDenied
+    } else {
+        KeyProblem::NoKeyboard
     }
 }
 
@@ -147,6 +160,10 @@ impl crate::keys::KeySource for LinuxKeySource {
     fn close(&mut self) {
         self.devices.clear();
     }
+
+    fn problem(&self) -> KeyProblem {
+        self.problem
+    }
 }
 
 #[cfg(any(test, feature = "emulate"))]
@@ -209,4 +226,17 @@ fn list_event_nodes() -> Vec<String> {
         .collect();
     names.sort();
     names
+}
+
+#[cfg(test)]
+mod tests {
+    use super::classify_keyboards;
+    use crate::keys::KeyProblem;
+
+    #[test]
+    fn permission_denial_is_not_reported_as_a_missing_keyboard() {
+        assert_eq!(classify_keyboards(0, 2), KeyProblem::PermissionDenied);
+        assert_eq!(classify_keyboards(0, 0), KeyProblem::NoKeyboard);
+        assert_eq!(classify_keyboards(1, 3), KeyProblem::Ok);
+    }
 }

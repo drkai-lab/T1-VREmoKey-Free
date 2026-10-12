@@ -1,4 +1,4 @@
-; Inno Setup script for the Rust free edition (Windows x64)
+﻿; Inno Setup script for the Rust free edition (Windows x64)
 
 #define AppName "T1-VREmoKey-Free"
 #define AppVersion "2.1.0"
@@ -27,10 +27,17 @@ ArchitecturesInstallIn64BitMode=x64compatible
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
+Name: "japanese"; MessagesFile: "compiler:Languages\Japanese.isl"
+
+[CustomMessages]
+english.TaskAutostart=Autostart
+english.StartAtLogon=Start at logon
+japanese.TaskAutostart=自動起動
+japanese.StartAtLogon=ログオン時に起動
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
-Name: "autostart"; Description: "Start at logon"; GroupDescription: "Autostart"; Flags: unchecked
+Name: "autostart"; Description: "{cm:StartAtLogon}"; GroupDescription: "{cm:TaskAutostart}"; Flags: unchecked
 
 [Files]
 Source: "..\target\release\vrc-expression-hotkeys.exe"; DestDir: "{app}"; Flags: ignoreversion

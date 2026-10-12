@@ -120,7 +120,104 @@ pub fn tr(lang: &str, key: &str) -> &'static str {
                 "Close"
             }
         }
-        "subtitle" => "VRChat Expression Hotkeys (F1-F4)",
+        "subtitle" => {
+            if ja {
+                "VRChat の表情ホットキー (F1-F4)"
+            } else {
+                "VRChat expression hotkeys (F1-F4)"
+            }
+        }
+        "host" => {
+            if ja {
+                "ホスト"
+            } else {
+                "Host"
+            }
+        }
+        "port" => {
+            if ja {
+                "ポート"
+            } else {
+                "Port"
+            }
+        }
+        "language" => {
+            if ja {
+                "言語"
+            } else {
+                "Language"
+            }
+        }
+        "zoom" => {
+            if ja {
+                "表示サイズ"
+            } else {
+                "Text size"
+            }
+        }
+        "port_invalid" => {
+            if ja {
+                "1〜65535 の数字を入れてください。"
+            } else {
+                "Enter a number from 1 to 65535."
+            }
+        }
+        "host_invalid" => {
+            if ja {
+                "ホスト名か IP アドレスを入れてください。"
+            } else {
+                "Enter a host name or an IP address."
+            }
+        }
+        "key_permission" => {
+            if ja {
+                "キーボードを読めません。ユーザーを input グループに入れて、ログインし直してください。端末での例: sudo usermod -aG input \"$USER\""
+            } else {
+                "The keyboard cannot be read. Add your user to the input group, then sign in again. Example: sudo usermod -aG input \"$USER\""
+            }
+        }
+        "key_none" => {
+            if ja {
+                "キーボードが見つかりません。接続を確認し、待受を一度止めてから入れ直してください。"
+            } else {
+                "No keyboard was found. Check the connection, then turn listening off and on."
+            }
+        }
+        "key_unsupported" => {
+            if ja {
+                "この OS ではキーの待受に対応していません。割り当ては編集できます。"
+            } else {
+                "This OS cannot listen for keys. Assignments can still be edited."
+            }
+        }
+        "none" => {
+            if ja {
+                "(なし)"
+            } else {
+                "(none)"
+            }
+        }
+        "import_bad_pack" => {
+            if ja {
+                "読み込めるのは zip、フォルダ、profile.json です。"
+            } else {
+                "Import a .zip, a folder, or profile.json."
+            }
+        }
+        "import_unsafe" => {
+            if ja {
+                "プロファイルの中に安全でないパスがあります。"
+            } else {
+                "The profile pack contains an unsafe path."
+            }
+        }
+        "import_missing" => {
+            if ja {
+                "profile.json が見つかりません。"
+            } else {
+                "profile.json was not found."
+            }
+        }
         _ => key_fallback(key),
     }
 }
@@ -130,6 +227,16 @@ fn key_fallback(key: &str) -> &'static str {
         "enable" => "Listen for Shift+F1..F4",
         _ => "?",
     }
+}
+
+pub fn present_error(lang: &str, err: &str) -> String {
+    let key = match err {
+        "profile pack must be a .zip, a folder, or profile.json" => "import_bad_pack",
+        "unsafe path in profile pack" => "import_unsafe",
+        "profile.json not found" => "import_missing",
+        _ => return err.to_string(),
+    };
+    tr(lang, key).to_string()
 }
 
 pub fn import_notice(skipped: &[i64], lang: &str) -> String {

@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use crate::chord::ChordTracker;
 use crate::focus::{observe_evdev, observe_vk, probe_focus, FocusGate};
-use crate::keys::{open_key_source, KeyEvent, KeySource};
+use crate::keys::{open_key_source, KeyEvent, KeyProblem, KeySource};
 use crate::osc::{parse_osc_packet, OscSender, OscTyped};
 use crate::paths::{log_line, AppPaths};
 use crate::profile::note_avatar_change;
@@ -24,6 +24,7 @@ struct Shared {
     last: Mutex<String>,
     focused: Mutex<Option<bool>>,
     held: Mutex<Option<String>>,
+    problem: Mutex<KeyProblem>,
 }
 
 pub struct ExpressionListener {
@@ -49,6 +50,7 @@ impl ExpressionListener {
                 last: Mutex::new(String::new()),
                 focused: Mutex::new(None),
                 held: Mutex::new(None),
+                problem: Mutex::new(KeyProblem::Ok),
             }),
             stop: Arc::new(AtomicBool::new(false)),
             thread: Mutex::new(None),
@@ -79,6 +81,14 @@ impl ExpressionListener {
             .lock()
             .unwrap_or_else(|err| err.into_inner())
             .clone()
+    }
+
+    pub fn key_problem(&self) -> KeyProblem {
+        *self
+            .shared
+            .problem
+            .lock()
+            .unwrap_or_else(|err| err.into_inner())
     }
 
     pub fn start(&self) {
@@ -143,6 +153,7 @@ fn listen_loop(
         let enabled = cfg.as_ref().is_some_and(|item| item.enabled);
         if !enabled {
             close_source(&mut source);
+            set_problem(&shared, KeyProblem::Ok);
             if stop_sleep(&stop, Duration::from_millis(400)) {
                 break;
             }
@@ -152,6 +163,7 @@ fn listen_loop(
             source = open_source();
         }
         if source.is_none() {
+            set_problem(&shared, KeyProblem::Unavailable);
             if stop_sleep(&stop, Duration::from_secs(1)) {
                 break;
             }
@@ -161,6 +173,9 @@ fn listen_loop(
             .as_mut()
             .map(|item| item.poll(Duration::from_millis(250)))
             .unwrap_or_default();
+        if let Some(item) = source.as_ref() {
+            set_problem(&shared, item.problem());
+        }
         if let (Some(cfg), Some(gate)) = (cfg.as_ref(), gate.as_mut()) {
             emit(&paths, &shared, cfg, &osc, &mut tracker, gate, &batch);
         }
@@ -209,6 +224,10 @@ fn note_held(shared: &Shared, name: &str, down: bool) {
     } else if held.as_deref() == Some(name) {
         *held = None;
     }
+}
+
+fn set_problem(shared: &Shared, problem: KeyProblem) {
+    *shared.problem.lock().unwrap_or_else(|err| err.into_inner()) = problem;
 }
 
 fn close_source(source: &mut Option<Box<dyn KeySource>>) {
@@ -392,8 +411,11 @@ pub fn run_listen(paths: &AppPaths) -> i32 {
 #[cfg(test)]
 mod tests {
     use std::path::Path;
+    use std::thread;
+    use std::time::{Duration, Instant};
 
     use super::note_held;
+    use crate::keys::{KeyEvent, KeyProblem, KeySource};
     use crate::listener::ExpressionListener;
     use crate::paths::AppPaths;
 
@@ -406,5 +428,48 @@ mod tests {
         assert_eq!(listener.held().as_deref(), Some("F2"));
         note_held(&listener.shared, "F2", false);
         assert!(listener.held().is_none());
+    }
+
+    #[test]
+    fn missing_key_source_reports_why_listening_cannot_start() {
+        let dir = tempfile::tempdir().unwrap();
+        let listener = ExpressionListener::with_source(AppPaths::in_dir(dir.path()), || None);
+        listener.start();
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while Instant::now() < deadline && listener.key_problem() != KeyProblem::Unavailable {
+            thread::sleep(Duration::from_millis(20));
+        }
+        assert_eq!(listener.key_problem(), KeyProblem::Unavailable);
+        listener.stop();
+    }
+
+    struct DeniedKeys;
+
+    impl KeySource for DeniedKeys {
+        fn poll(&mut self, timeout: Duration) -> Vec<KeyEvent> {
+            thread::sleep(timeout.min(Duration::from_millis(30)));
+            Vec::new()
+        }
+
+        fn close(&mut self) {}
+
+        fn problem(&self) -> KeyProblem {
+            KeyProblem::PermissionDenied
+        }
+    }
+
+    #[test]
+    fn permission_failure_reaches_the_listener() {
+        let dir = tempfile::tempdir().unwrap();
+        let listener = ExpressionListener::with_source(AppPaths::in_dir(dir.path()), || {
+            Some(Box::new(DeniedKeys))
+        });
+        listener.start();
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while Instant::now() < deadline && listener.key_problem() != KeyProblem::PermissionDenied {
+            thread::sleep(Duration::from_millis(20));
+        }
+        assert_eq!(listener.key_problem(), KeyProblem::PermissionDenied);
+        listener.stop();
     }
 }

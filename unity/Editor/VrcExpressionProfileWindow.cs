@@ -108,7 +108,8 @@ namespace VrcExpressionHotkeys.EditorTools
             var style = new GUIStyle(EditorStyles.toolbarButton);
             if (selected)
                 style.fontStyle = FontStyle.Bold;
-            if (GUILayout.Button(new GUIContent(EditorLocale.T(key), EditorLocale.T("tooltip.lang")), style, GUILayout.Width(88))
+            string label = (selected ? "> " : "") + EditorLocale.T(key);
+            if (GUILayout.Button(new GUIContent(label, EditorLocale.T("tooltip.lang")), style, GUILayout.Width(104))
                 && !selected)
                 EditorLocale.Set(code);
         }
@@ -311,6 +312,12 @@ namespace VrcExpressionHotkeys.EditorTools
                 request.clips.Add(chosen[i].clip);
                 request.slots.Add(chosen[i].slot);
             }
+            if (!EditorUtility.DisplayDialog(
+                EditorLocale.T("window.title"),
+                EditorLocale.T("dialog.confirm_install"),
+                EditorLocale.T("button.install"),
+                EditorLocale.T("button.cancel")))
+                return;
             var plan = ExpressionInstall.Apply(request);
             if (!plan.ok)
             {
@@ -383,6 +390,12 @@ namespace VrcExpressionHotkeys.EditorTools
 
         void RestoreBackup()
         {
+            if (!EditorUtility.DisplayDialog(
+                EditorLocale.T("window.title"),
+                EditorLocale.T("dialog.confirm_restore"),
+                EditorLocale.T("button.restore_backup"),
+                EditorLocale.T("button.cancel")))
+                return;
             int count = ExpressionInstall.Restore();
             EditorUtility.DisplayDialog(
                 EditorLocale.T("window.title"),

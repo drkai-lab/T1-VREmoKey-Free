@@ -20,9 +20,21 @@ pub enum KeyEvent {
     },
 }
 
+/// Why a key source cannot deliver keys. `Ok` means at least one keyboard is open.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum KeyProblem {
+    Ok,
+    PermissionDenied,
+    NoKeyboard,
+    Unavailable,
+}
+
 pub trait KeySource: Send {
     fn poll(&mut self, timeout: Duration) -> Vec<KeyEvent>;
     fn close(&mut self);
+    fn problem(&self) -> KeyProblem {
+        KeyProblem::Ok
+    }
 }
 
 pub fn open_key_source() -> Option<Box<dyn KeySource>> {

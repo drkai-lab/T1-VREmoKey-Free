@@ -8,7 +8,8 @@ use eframe::egui;
 use serde_json::{Map, Value};
 
 use crate::focus::as_bool;
-use crate::i18n::{import_notice, tr};
+use crate::i18n::{import_notice, present_error, tr};
+use crate::keys::KeyProblem;
 use crate::listener::{AvatarOscListener, ExpressionListener};
 use crate::paths::{log_line, AppPaths};
 use crate::profile::{
@@ -17,12 +18,21 @@ use crate::profile::{
 };
 use crate::settings::{
     avatar_listen_port, lang_of, load_settings, normalize_assign, resolve_config, save_settings,
+    zoom_of,
 };
 use crate::tray::{Tray, TrayAction};
 use crate::{DISPLAY_NAME, FKEY_NAMES};
 
 const PINK: egui::Color32 = egui::Color32::from_rgb(255, 67, 151);
+const HEADER: egui::Color32 = egui::Color32::from_rgb(156, 42, 122);
+const PANEL: egui::Color32 = egui::Color32::from_rgb(255, 247, 250);
+const OUTLINE: egui::Color32 = egui::Color32::from_rgb(90, 62, 74);
+const SELECT_TEXT: egui::Color32 = egui::Color32::from_rgb(40, 10, 24);
+const ERROR_FG: egui::Color32 = egui::Color32::from_rgb(122, 20, 48);
+const ERROR_BG: egui::Color32 = egui::Color32::from_rgb(255, 236, 240);
+const SUBTITLE: egui::Color32 = egui::Color32::from_rgb(255, 230, 240);
 const THUMB: f32 = 56.0;
+const ZOOM_CHOICES: [f32; 4] = [1.0, 1.25, 1.5, 2.0];
 
 pub fn run(paths: &AppPaths) -> i32 {
     let mut viewport = egui::ViewportBuilder::default()
@@ -77,6 +87,8 @@ struct HotkeyApp {
     shot_wait: u8,
     stage_pin: Option<i64>,
     stage_dismissed: Option<String>,
+    zoom: f32,
+    zoom_ready: bool,
 }
 
 impl HotkeyApp {
@@ -84,6 +96,7 @@ impl HotkeyApp {
         install_fonts(&cc.egui_ctx);
         install_theme(&cc.egui_ctx);
         let settings = load_settings(&paths);
+        let zoom = zoom_of(&settings);
         let shot = ui_shot_path();
         // Screenshot mode previews Japanese without writing that choice to settings.
         let lang = if shot.is_some() {
@@ -134,6 +147,8 @@ impl HotkeyApp {
             shot_wait: 0,
             stage_pin: None,
             stage_dismissed: None,
+            zoom,
+            zoom_ready: false,
         };
         app.sync_avatar();
         app
@@ -141,7 +156,7 @@ impl HotkeyApp {
 
     fn contents(&mut self, ui: &mut egui::Ui) {
         egui::Frame::NONE
-            .fill(egui::Color32::from_rgb(255, 247, 250))
+            .fill(PANEL)
             .inner_margin(egui::Margin::same(12))
             .show(ui, |ui| {
                 self.header(ui);
@@ -149,6 +164,7 @@ impl HotkeyApp {
                 self.options(ui);
                 ui.add_space(6.0);
                 self.status_line(ui);
+                self.key_warning(ui);
                 ui.add_space(8.0);
                 self.rows(ui);
             });
@@ -157,7 +173,7 @@ impl HotkeyApp {
     fn header(&mut self, ui: &mut egui::Ui) {
         let icon = self.header_texture(ui.ctx());
         egui::Frame::NONE
-            .fill(PINK)
+            .fill(HEADER)
             .inner_margin(egui::Margin::same(10))
             .corner_radius(10.0)
             .show(ui, |ui| {
@@ -174,8 +190,8 @@ impl HotkeyApp {
                         );
                         ui.label(
                             egui::RichText::new(tr(&self.lang, "subtitle"))
-                                .color(egui::Color32::from_rgb(255, 230, 240))
-                                .size(13.0),
+                                .color(SUBTITLE)
+                                .size(14.0),
                         );
                     });
                 });
@@ -196,32 +212,45 @@ impl HotkeyApp {
         {
             self.save_flags();
         }
-        ui.horizontal(|ui| {
-            ui.label("Host:");
+        let mut host_done = false;
+        let mut port_done = false;
+        let mut listen_done = false;
+        ui.horizontal_wrapped(|ui| {
+            ui.label(tr(&lang, "host"));
             let host = ui.add(egui::TextEdit::singleline(&mut self.host).desired_width(140.0));
-            ui.label("Port:");
+            ui.label(tr(&lang, "port"));
             let port = ui.add(egui::TextEdit::singleline(&mut self.port).desired_width(64.0));
             ui.label(tr(&lang, "listen"));
             let listen =
                 ui.add(egui::TextEdit::singleline(&mut self.listen_port).desired_width(64.0));
-            if host.changed() || port.changed() {
-                self.save_osc();
-            }
-            if listen.changed() {
-                self.save_listen();
-            }
+            host_done = host.lost_focus();
+            port_done = port.lost_focus();
+            listen_done = listen.lost_focus();
         });
-        ui.horizontal(|ui| {
+        if host_done || port_done {
+            self.commit_osc();
+        }
+        if listen_done {
+            self.commit_listen();
+        }
+        if !valid_host(&self.host) {
+            error_line(ui, tr(&lang, "host_invalid"));
+        }
+        if valid_port(&self.port).is_none() || valid_port(&self.listen_port).is_none() {
+            error_line(ui, tr(&lang, "port_invalid"));
+        }
+        ui.horizontal_wrapped(|ui| {
             ui.label(tr(&lang, "avatar"));
             self.avatar_box(ui);
             if ui.button(tr(&lang, "import")).clicked() {
                 self.import_profile();
             }
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button("EN/JA").clicked() {
-                    self.toggle_lang();
-                }
-            });
+        });
+        ui.horizontal_wrapped(|ui| {
+            ui.label(tr(&lang, "language"));
+            self.language_box(ui);
+            ui.label(tr(&lang, "zoom"));
+            self.zoom_box(ui);
         });
     }
 
@@ -290,10 +319,11 @@ impl HotkeyApp {
                 .collect();
             egui::Frame::NONE
                 .fill(egui::Color32::WHITE)
+                .stroke(egui::Stroke::new(1.0, OUTLINE))
                 .inner_margin(egui::Margin::same(6))
                 .corner_radius(8.0)
                 .show(ui, |ui| {
-                    ui.horizontal(|ui| {
+                    ui.horizontal_wrapped(|ui| {
                         ui.add_sized(
                             [40.0, THUMB],
                             egui::Label::new(egui::RichText::new(name).strong().size(16.0)),
@@ -353,7 +383,7 @@ impl HotkeyApp {
         let last = {
             let last = self.listener.last();
             if last.is_empty() {
-                "-".to_string()
+                tr(&self.lang, "none").to_string()
             } else {
                 last
             }
@@ -389,7 +419,18 @@ impl HotkeyApp {
         self.sync_listener();
     }
 
-    fn save_osc(&mut self) {
+    fn commit_osc(&mut self) {
+        let host = valid_host(&self.host).then(|| self.host.trim().to_string());
+        let port = valid_port(&self.port);
+        if host.is_none() && port.is_none() {
+            return;
+        }
+        if let Some(host) = host.as_ref() {
+            self.host.clone_from(host);
+        }
+        if let Some(port) = port {
+            self.port = port.to_string();
+        }
         let Some(obj) = self.settings.as_object_mut() else {
             return;
         };
@@ -402,27 +443,32 @@ impl HotkeyApp {
         let Some(osc) = osc.as_object_mut() else {
             return;
         };
-        let host = self.host.trim();
-        osc.insert(
-            "host".into(),
-            Value::String(if host.is_empty() {
-                "127.0.0.1".into()
-            } else {
-                host.to_string()
-            }),
-        );
-        let Ok(port) = self.port.trim().parse::<i64>() else {
-            return;
-        };
-        osc.insert("port".into(), Value::from(port));
-        let _ = save_settings(&self.paths, &self.settings);
+        let mut changed = false;
+        if let Some(host) = host {
+            let current = osc.get("host").and_then(Value::as_str).unwrap_or("");
+            if current != host {
+                osc.insert("host".into(), Value::String(host));
+                changed = true;
+            }
+        }
+        if let Some(port) = port {
+            let current = osc.get("port").and_then(Value::as_i64);
+            if current != Some(i64::from(port)) {
+                osc.insert("port".into(), Value::from(port));
+                changed = true;
+            }
+        }
+        if changed {
+            let _ = save_settings(&self.paths, &self.settings);
+        }
     }
 
-    fn save_listen(&mut self) {
-        let Ok(port) = self.listen_port.trim().parse::<i64>() else {
+    fn commit_listen(&mut self) {
+        let Some(port) = valid_port(&self.listen_port) else {
             return;
         };
-        if !(1..=65535).contains(&port) {
+        self.listen_port = port.to_string();
+        if avatar_listen_port(&self.settings) == port {
             return;
         }
         let Some(obj) = self.settings.as_object_mut() else {
@@ -492,16 +538,79 @@ impl HotkeyApp {
         self.avatar = Some(listener);
     }
 
-    fn toggle_lang(&mut self) {
-        self.lang = if self.lang == "ja" {
-            "en".into()
+    fn language_box(&mut self, ui: &mut egui::Ui) {
+        let mut code = self.lang.clone();
+        let shown = if self.lang == "ja" {
+            "日本語"
         } else {
-            "ja".into()
+            "English"
         };
+        egui::ComboBox::from_id_salt("ui-lang")
+            .selected_text(shown)
+            .show_ui(ui, |ui| {
+                ui.selectable_value(&mut code, "ja".to_string(), "日本語");
+                ui.selectable_value(&mut code, "en".to_string(), "English");
+            });
+        if code != self.lang {
+            self.lang = code;
+            if let Some(obj) = self.settings.as_object_mut() {
+                obj.insert("lang".into(), Value::String(self.lang.clone()));
+            }
+            let _ = save_settings(&self.paths, &self.settings);
+        }
+    }
+
+    fn zoom_box(&mut self, ui: &mut egui::Ui) {
+        let mut chosen = self.zoom;
+        egui::ComboBox::from_id_salt("ui-zoom")
+            .selected_text(zoom_label(self.zoom))
+            .show_ui(ui, |ui| {
+                for zoom in ZOOM_CHOICES {
+                    ui.selectable_value(&mut chosen, zoom, zoom_label(zoom));
+                }
+            });
+        if (chosen - self.zoom).abs() > 0.01 {
+            self.zoom = chosen;
+            ui.ctx().set_zoom_factor(self.zoom);
+            self.store_zoom();
+        }
+    }
+
+    fn sync_zoom(&mut self, ctx: &egui::Context) {
+        if !self.zoom_ready {
+            ctx.set_zoom_factor(self.zoom);
+            self.zoom_ready = true;
+            return;
+        }
+        let current = ctx.zoom_factor().clamp(0.75, 3.0);
+        if (current - self.zoom).abs() > 0.01 {
+            self.zoom = current;
+            if (ctx.zoom_factor() - current).abs() > 0.001 {
+                ctx.set_zoom_factor(current);
+            }
+            self.store_zoom();
+        }
+    }
+
+    fn store_zoom(&mut self) {
+        let stored = (self.zoom * 100.0).round() / 100.0;
         if let Some(obj) = self.settings.as_object_mut() {
-            obj.insert("lang".into(), Value::String(self.lang.clone()));
+            obj.insert("ui_zoom".into(), Value::from(stored));
         }
         let _ = save_settings(&self.paths, &self.settings);
+    }
+
+    fn key_warning(&self, ui: &mut egui::Ui) {
+        if !self.enabled {
+            return;
+        }
+        let key = match self.listener.key_problem() {
+            KeyProblem::Ok => return,
+            KeyProblem::PermissionDenied => "key_permission",
+            KeyProblem::NoKeyboard => "key_none",
+            KeyProblem::Unavailable => "key_unsupported",
+        };
+        error_line(ui, tr(&self.lang, key));
     }
 
     fn import_profile(&mut self) {
@@ -526,7 +635,7 @@ impl HotkeyApp {
                     import_notice(&imported.skipped, &self.lang)
                 };
             }
-            Err(err) => self.notice = err,
+            Err(err) => self.notice = present_error(&self.lang, &err),
         }
     }
 
@@ -629,7 +738,7 @@ impl HotkeyApp {
                 egui::CentralPanel::default().show(ctx, |ui| {
                     ui.vertical_centered(|ui| {
                         ui.add_space(24.0);
-                        ui.label(egui::RichText::new(&name).strong().size(42.0).color(PINK));
+                        ui.label(egui::RichText::new(&name).strong().size(42.0).color(HEADER));
                         ui.add_space(16.0);
                         let side = ui.available_width().clamp(240.0, 640.0);
                         ui.add(
@@ -743,6 +852,7 @@ impl HotkeyApp {
 
 impl eframe::App for HotkeyApp {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.sync_zoom(ctx);
         if self.tray.is_none() && !self.tray_failed {
             match Tray::install(ctx.clone(), &self.lang) {
                 Ok(tray) => {
@@ -778,11 +888,18 @@ impl eframe::App for HotkeyApp {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        self.contents(ui);
+        ui.painter().rect_filled(ui.max_rect(), 0.0, PANEL);
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                self.contents(ui);
+            });
         self.note_ui_shot(ui.ctx());
     }
 
     fn on_exit(&mut self, _gl: Option<&glow::Context>) {
+        self.commit_osc();
+        self.commit_listen();
         self.listener.stop();
         if let Some(avatar) = &self.avatar {
             avatar.stop();
@@ -874,12 +991,59 @@ fn save_rgba_png(
 
 fn install_theme(ctx: &egui::Context) {
     let mut visuals = egui::Visuals::light();
-    visuals.panel_fill = egui::Color32::from_rgb(255, 247, 250);
-    visuals.window_fill = visuals.panel_fill;
+    visuals.panel_fill = PANEL;
+    visuals.window_fill = PANEL;
+    visuals.extreme_bg_color = egui::Color32::WHITE;
+    visuals.error_fg_color = ERROR_FG;
+    visuals.warn_fg_color = ERROR_FG;
+    let outline = egui::Stroke::new(1.0, OUTLINE);
+    for widgets in [
+        &mut visuals.widgets.inactive,
+        &mut visuals.widgets.hovered,
+        &mut visuals.widgets.active,
+        &mut visuals.widgets.open,
+    ] {
+        widgets.bg_stroke = outline;
+    }
     visuals.selection.bg_fill = PINK;
-    visuals.selection.stroke.color = PINK;
-    visuals.hyperlink_color = PINK;
+    visuals.selection.stroke = egui::Stroke::new(2.0, SELECT_TEXT);
+    visuals.hyperlink_color = HEADER;
     ctx.set_visuals(visuals);
+}
+
+fn error_line(ui: &mut egui::Ui, text: &str) {
+    egui::Frame::NONE
+        .fill(ERROR_BG)
+        .stroke(egui::Stroke::new(1.0, ERROR_FG))
+        .inner_margin(egui::Margin::same(8))
+        .corner_radius(6.0)
+        .show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
+            ui.label(egui::RichText::new(text).color(ERROR_FG).size(14.0));
+        });
+}
+
+fn zoom_label(zoom: f32) -> String {
+    format!("{}%", (zoom * 100.0).round() as i32)
+}
+
+fn valid_host(host: &str) -> bool {
+    let host = host.trim();
+    if host.is_empty() || host.len() > 253 || host.starts_with('.') || host.ends_with('.') {
+        return false;
+    }
+    host.bytes().all(|byte| {
+        byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b':' | b'[' | b']')
+    })
+}
+
+fn valid_port(text: &str) -> Option<u16> {
+    let text = text.trim();
+    if text.is_empty() || (text.len() > 1 && text.starts_with('0')) {
+        return None;
+    }
+    let port: u16 = text.parse().ok()?;
+    (1..=65535).contains(&port).then_some(port)
 }
 
 fn window_icon() -> Option<egui::IconData> {
@@ -914,8 +1078,9 @@ fn generic_image(size: usize) -> egui::ColorImage {
 
 #[cfg(test)]
 mod tests {
-    use super::{save_rgba_png, tr, ui_font_definitions};
-    use crate::i18n::import_notice;
+    use super::{save_rgba_png, tr, ui_font_definitions, valid_host, valid_port};
+    use crate::i18n::{import_notice, present_error};
+    use crate::settings::zoom_of;
     use eframe::egui;
 
     fn preview_lines() -> Vec<String> {
@@ -938,6 +1103,20 @@ mod tests {
             "tray_quit",
             "preview",
             "stage_close",
+            "subtitle",
+            "host",
+            "port",
+            "language",
+            "zoom",
+            "port_invalid",
+            "host_invalid",
+            "key_permission",
+            "key_none",
+            "key_unsupported",
+            "none",
+            "import_bad_pack",
+            "import_unsafe",
+            "import_missing",
         ] {
             lines.push(tr("ja", key).to_string());
         }
@@ -948,6 +1127,33 @@ mod tests {
         lines.push("3  驚き".to_string());
         lines.push("4  あいうえお".to_string());
         lines
+    }
+
+    #[test]
+    fn japanese_copy_is_translated_and_ports_are_checked() {
+        assert_ne!(tr("ja", "subtitle"), tr("en", "subtitle"));
+        assert!(tr("ja", "subtitle").contains('表'));
+        assert_eq!(tr("ja", "host"), "ホスト");
+        assert_eq!(tr("ja", "port"), "ポート");
+        assert!(tr("ja", "key_permission").contains("usermod"));
+        assert!(present_error("ja", "unsafe path in profile pack").contains("安全"));
+        assert_eq!(
+            present_error("en", "profile.json not found"),
+            "profile.json was not found."
+        );
+        assert_eq!(valid_port("9000"), Some(9000));
+        assert_eq!(valid_port("0"), None);
+        assert_eq!(valid_port("65536"), None);
+        assert_eq!(valid_port("abc"), None);
+        assert_eq!(valid_port("09"), None);
+        assert!(valid_host("127.0.0.1"));
+        assert!(valid_host("localhost"));
+        assert!(!valid_host(""));
+        assert!(!valid_host("not a host"));
+        let mut settings = serde_json::json!({"ui_zoom": 1.5});
+        assert!((zoom_of(&settings) - 1.5).abs() < 0.001);
+        settings = serde_json::json!({"ui_zoom": 9.0});
+        assert!((zoom_of(&settings) - 1.0).abs() < 0.001);
     }
 
     #[test]

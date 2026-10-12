@@ -57,15 +57,17 @@ You can also copy this `unity/` folder into the project's `Packages` folder.
      one back. Display names can be Japanese.
    - Assign each kept clip to Shift+F1..F4 (four slots). The window renders
      a 256×256 face thumbnail and restores the avatar afterward.
-   - **Install and export / FX に入れて書き出す** asks for a folder first,
-     then adds `Expression1`..`Expression4` bools and FX layers for the
-     slots you filled. Layers are placed after hand-gesture layers. Write
-     Defaults follows the majority of the existing FX states. The install
-     is refused when it would pass 256 synced bits, when a foreign layer
-     already uses that name, or when the parameter is not a bool. A second
-     run updates the `VREmoKey` layer instead of adding another. The first
-     edit is copied to `VREmoKeyBackup` next to the project's `Assets`
-     folder. **Restore backup / 元に戻す** copies those files back.
+   - **Install and export / FX に入れて書き出す** asks for a folder, then asks
+     before it changes the controller. It adds `Expression1`..`Expression4`
+     bools and FX layers for the slots you filled. Layers are placed after
+     hand-gesture layers. Write Defaults follows the majority of the existing
+     FX states. The install is refused when it would pass 256 synced bits,
+     when a foreign layer already uses that name, or when the parameter is
+     not a bool. A second run updates the `VREmoKey` layer instead of adding
+     another. The first edit is copied to `VREmoKeyBackup` next to the
+     project's `Assets` folder. **Restore backup / 元に戻す** asks first, copies
+     the current files to `VREmoKeyBackup/before-restore-<time>`, then puts
+     the original backup back.
    - The folder contains `profile.json` and `thumbs/N.png`. Zip it if you
      want one file.
 2. Import the pack in the desktop app. Each of F1..F4 picks from the

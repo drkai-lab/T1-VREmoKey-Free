@@ -87,6 +87,7 @@ namespace VrcExpressionHotkeys.EditorTools
             if (!File.Exists(manifest))
                 return 0;
             int restored = 0;
+            string stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
             foreach (var line in File.ReadAllLines(manifest))
             {
                 if (string.IsNullOrWhiteSpace(line))
@@ -98,6 +99,7 @@ namespace VrcExpressionHotkeys.EditorTools
                 string assetPath = line.Substring(split + 1);
                 if (!File.Exists(backup) || string.IsNullOrEmpty(assetPath))
                     continue;
+                KeepCurrentBeforeRestore(assetPath, stamp);
                 File.Copy(backup, Absolute(assetPath), true);
                 AssetDatabase.ImportAsset(assetPath);
                 restored++;
@@ -252,6 +254,18 @@ namespace VrcExpressionHotkeys.EditorTools
                     return i;
             }
             return -1;
+        }
+
+        static void KeepCurrentBeforeRestore(string assetPath, string stamp)
+        {
+            string source = Absolute(assetPath);
+            if (!File.Exists(source))
+                return;
+            string project = Directory.GetParent(Application.dataPath).FullName;
+            string folder = Path.Combine(project, BackupFolderName, "before-restore-" + stamp);
+            Directory.CreateDirectory(folder);
+            string dest = Path.Combine(folder, Path.GetFileName(assetPath));
+            File.Copy(source, dest, true);
         }
 
         static void Backup(string assetPath)

@@ -905,6 +905,34 @@ def list_event_nodes():
         os.path.join("/dev/input", name) for name in names if name.startswith("event"))
 
 
+def _valid_host(host):
+    host = (host or "").strip()
+    if not host or len(host) > 253 or host.startswith(".") or host.endswith("."):
+        return False
+    return all(ch.isascii() and (ch.isalnum() or ch in ".-:[]") for ch in host)
+
+
+def _valid_port(text):
+    text = (text or "").strip()
+    if not text or (len(text) > 1 and text.startswith("0")):
+        return None
+    try:
+        port = int(text)
+    except ValueError:
+        return None
+    if 1 <= port <= 65535:
+        return port
+    return None
+
+
+def classify_keyboards(open_count, denied_count):
+    if open_count:
+        return "ok"
+    if denied_count:
+        return "permission"
+    return "none"
+
+
 class LinuxKeySource:
     """Readable keyboards via evdev. The device is never grabbed."""
 
@@ -913,6 +941,7 @@ class LinuxKeySource:
         self.pending = {}
         self._next_scan = 0.0
         self._perm_warned = False
+        self.problem = "ok"
         self.rescan()
 
     def rescan(self):
@@ -932,11 +961,13 @@ class LinuxKeySource:
             if path not in wanted:
                 self._close_fd(fd)
                 dropped.append(path)
-        if denied and not self.fds and not self._perm_warned:
+        self.problem = classify_keyboards(len(self.fds), len(denied))
+        if self.problem == "permission" and not self._perm_warned:
             self._perm_warned = True
             log(
                 "no keyboard is readable "
-                f"({', '.join(denied)}). Add your user to the input group.")
+                f"({', '.join(denied)}). Add your user to the input group and sign in again: "
+                'sudo usermod -aG input "$USER"')
         self._next_scan = time.time() + 1.0
         return dropped
 
@@ -1125,6 +1156,7 @@ class ExpressionListener:
         self._stop = threading.Event()
         self._thread = None
         self._lock = threading.Lock()
+        self.key_problem = "ok"
 
     def is_running(self):
         return bool(self._thread and self._thread.is_alive())
@@ -1192,15 +1224,18 @@ class ExpressionListener:
                     if source is not None:
                         source.close()
                         source = None
+                    self.key_problem = "ok"
                     self._stop.wait(0.4)
                     continue
                 if source is None:
                     source = open_key_source()
                 if source is None:
+                    self.key_problem = "unavailable"
                     self._stop.wait(1.0)
                     continue
                 try:
                     batch = source.poll(0.25)
+                    self.key_problem = getattr(source, "problem", "ok")
                 except Exception as exc:
                     log(f"key read failed: {exc}")
                     with contextlib.suppress(Exception):
@@ -1351,7 +1386,7 @@ def run_gui():
             self._updating = False
             self._avatar_ids = []
             self._avatar_listener = None
-            root.title(f"VRChat Expression Hotkeys (F1-F{SLOT_COUNT})")
+            root.title(self.tr("subtitle"))
             root.geometry("720x640")
             root.minsize(560, 480)
             self._build()
@@ -1377,6 +1412,27 @@ def run_gui():
                     "running": "Listening",
                     "stopped": "Stopped",
                     "last": "Last",
+                    "subtitle": "VRChat expression hotkeys (F1-F4)",
+                    "host": "Host",
+                    "port": "Port",
+                    "language": "Language",
+                    "port_invalid": "Enter a number from 1 to 65535.",
+                    "host_invalid": "Enter a host name or an IP address.",
+                    "key_permission": (
+                        "The keyboard cannot be read. Add your user to the input group, "
+                        'then sign in again. Example: sudo usermod -aG input "$USER"'
+                    ),
+                    "key_none": (
+                        "No keyboard was found. Check the connection, "
+                        "then turn listening off and on."
+                    ),
+                    "key_unsupported": (
+                        "This OS cannot listen for keys. Assignments can still be edited."
+                    ),
+                    "none": "(none)",
+                    "import_bad_pack": "Import a .zip, a folder, or profile.json.",
+                    "import_unsafe": "The profile pack contains an unsafe path.",
+                    "import_missing": "profile.json was not found.",
                 },
                 "ja": {
                     "enable": "Shift+F1..F4 を待つ",
@@ -1390,6 +1446,26 @@ def run_gui():
                     "running": "待受中",
                     "stopped": "停止",
                     "last": "最後",
+                    "subtitle": "VRChat の表情ホットキー (F1-F4)",
+                    "host": "ホスト",
+                    "port": "ポート",
+                    "language": "言語",
+                    "port_invalid": "1〜65535 の数字を入れてください。",
+                    "host_invalid": "ホスト名か IP アドレスを入れてください。",
+                    "key_permission": (
+                        "キーボードを読めません。ユーザーを input グループに入れて、"
+                        'ログインし直してください。端末での例: sudo usermod -aG input "$USER"'
+                    ),
+                    "key_none": (
+                        "キーボードが見つかりません。接続を確認し、待受を一度止めてから入れ直してください。"
+                    ),
+                    "key_unsupported": (
+                        "この OS ではキーの待受に対応していません。割り当ては編集できます。"
+                    ),
+                    "none": "(なし)",
+                    "import_bad_pack": "読み込めるのは zip、フォルダ、profile.json です。",
+                    "import_unsafe": "プロファイルの中に安全でないパスがあります。",
+                    "import_missing": "profile.json が見つかりません。",
                 },
             }
             lang = table.get(self.lang, table["en"])
@@ -1410,16 +1486,24 @@ def run_gui():
             host_row = ttk.Frame(self.root)
             host_row.pack(fill="x", padx=8, pady=2)
             osc = self.settings.get("osc") if isinstance(self.settings.get("osc"), dict) else {}
-            ttk.Label(host_row, text="Host:").pack(side="left")
+            self.host_lbl = ttk.Label(host_row, text=self.tr("host"))
+            self.host_lbl.pack(side="left")
             self.osc_host = tk.StringVar(value=str(osc.get("host") or "127.0.0.1"))
-            ttk.Entry(host_row, textvariable=self.osc_host, width=16).pack(side="left", padx=4)
-            ttk.Label(host_row, text="Port:").pack(side="left")
+            host_entry = ttk.Entry(host_row, textvariable=self.osc_host, width=16)
+            host_entry.pack(side="left", padx=4)
+            host_entry.bind("<FocusOut>", lambda _event: self._commit_osc())
+            self.port_lbl = ttk.Label(host_row, text=self.tr("port"))
+            self.port_lbl.pack(side="left")
             self.osc_port = tk.StringVar(value=str(osc.get("port") or OSC_PORT))
-            ttk.Entry(host_row, textvariable=self.osc_port, width=6).pack(side="left", padx=4)
+            port_entry = ttk.Entry(host_row, textvariable=self.osc_port, width=6)
+            port_entry.pack(side="left", padx=4)
+            port_entry.bind("<FocusOut>", lambda _event: self._commit_osc())
             self.listen_lbl = ttk.Label(host_row, text=self.tr("listen"))
             self.listen_lbl.pack(side="left", padx=(12, 4))
             self.listen_var = tk.StringVar(value=str(avatar_listen_port(self.settings)))
-            ttk.Entry(host_row, textvariable=self.listen_var, width=6).pack(side="left")
+            listen_entry = ttk.Entry(host_row, textvariable=self.listen_var, width=6)
+            listen_entry.pack(side="left")
+            listen_entry.bind("<FocusOut>", lambda _event: self._commit_listen())
 
             avatar_row = ttk.Frame(self.root)
             avatar_row.pack(fill="x", padx=8, pady=4)
@@ -1433,9 +1517,21 @@ def run_gui():
             self.import_btn = ttk.Button(
                 avatar_row, text=self.tr("import"), command=self.on_import)
             self.import_btn.pack(side="left")
-            ttk.Button(avatar_row, text="EN/JA", width=6, command=self.on_lang).pack(
-                side="right")
+            self.lang_lbl = ttk.Label(avatar_row, text=self.tr("language"))
+            self.lang_lbl.pack(side="left", padx=(12, 4))
+            self.lang_var = tk.StringVar(value="日本語" if self.lang == "ja" else "English")
+            self.lang_box = ttk.Combobox(
+                avatar_row, textvariable=self.lang_var, state="readonly", width=12,
+                values=["日本語", "English"])
+            self.lang_box.pack(side="left")
+            self.lang_box.bind("<<ComboboxSelected>>", self.on_lang)
 
+            self.field_error = tk.Label(
+                self.root, anchor="w", justify="left", wraplength=680,
+                fg="#7A1430", bg="#FFE8F0")
+            self.warn = tk.Label(
+                self.root, anchor="w", justify="left", wraplength=680,
+                fg="#7A1430", bg="#FFE8F0")
             self.status = tk.Label(self.root, anchor="w", justify="left")
             self.status.pack(fill="x", padx=8)
             body = ttk.Frame(self.root)
@@ -1457,9 +1553,9 @@ def run_gui():
             body.columnconfigure(2, weight=1)
             self.enabled.trace_add("write", lambda *_n: self._save_flags())
             self.vrchat_only.trace_add("write", lambda *_n: self._save_flags())
-            self.osc_host.trace_add("write", lambda *_n: self._save_osc())
-            self.osc_port.trace_add("write", lambda *_n: self._save_osc())
-            self.listen_var.trace_add("write", lambda *_n: self._save_listen())
+            self.osc_host.trace_add("write", lambda *_n: self._show_field_errors())
+            self.osc_port.trace_add("write", lambda *_n: self._show_field_errors())
+            self.listen_var.trace_add("write", lambda *_n: self._show_field_errors())
 
         def _profile(self):
             return active_profile(self.settings)
@@ -1545,29 +1641,57 @@ def run_gui():
             save_settings(self.settings)
             self._sync_listener()
 
-        def _save_osc(self):
+        def _commit_osc(self):
             if self._updating:
                 return
+            host = self.osc_host.get().strip()
+            port = _valid_port(self.osc_port.get())
             osc = self.settings.setdefault("osc", {})
-            osc["host"] = self.osc_host.get().strip() or "127.0.0.1"
-            try:
-                osc["port"] = int(self.osc_port.get().strip())
-            except ValueError:
-                return
-            save_settings(self.settings)
+            if not isinstance(osc, dict):
+                osc = {}
+                self.settings["osc"] = osc
+            changed = False
+            if _valid_host(host) and osc.get("host") != host:
+                osc["host"] = host
+                self.osc_host.set(host)
+                changed = True
+            if port is not None and osc.get("port") != port:
+                osc["port"] = port
+                self.osc_port.set(str(port))
+                changed = True
+            if changed:
+                save_settings(self.settings)
+            self._show_field_errors()
 
-        def _save_listen(self):
+        def _commit_listen(self):
             if self._updating:
                 return
-            try:
-                port = int(self.listen_var.get().strip())
-            except ValueError:
+            port = _valid_port(self.listen_var.get())
+            if port is None:
+                self._show_field_errors()
                 return
-            if not 1 <= port <= 65535:
+            self.listen_var.set(str(port))
+            if avatar_listen_port(self.settings) == port:
+                self._show_field_errors()
                 return
-            self.settings.setdefault("avatar_osc", {})["port"] = port
+            block = self.settings.setdefault("avatar_osc", {})
+            if not isinstance(block, dict):
+                block = {}
+                self.settings["avatar_osc"] = block
+            block["port"] = port
             save_settings(self.settings)
             self._sync_avatar()
+            self._show_field_errors()
+
+        def _show_field_errors(self):
+            notes = []
+            if not _valid_host(self.osc_host.get()):
+                notes.append(self.tr("host_invalid"))
+            port_bad = _valid_port(self.osc_port.get()) is None
+            listen_bad = _valid_port(self.listen_var.get()) is None
+            if port_bad or listen_bad:
+                notes.append(self.tr("port_invalid"))
+            self._show_note(self.field_error, "\n".join(notes))
 
         def _sync_listener(self):
             if _as_bool(self.settings.get("enabled", True), True):
@@ -1616,7 +1740,7 @@ def run_gui():
             try:
                 profile = import_profile_pack(path)
             except (OSError, ValueError, json.JSONDecodeError) as exc:
-                self.status.configure(text=str(exc))
+                self.status.configure(text=self._present_error(str(exc)))
                 return
             activate_avatar(self.settings, profile["id"])
             save_settings(self.settings)
@@ -1639,21 +1763,44 @@ def run_gui():
             save_settings(self.settings)
             self._reload_rows()
 
-        def on_lang(self):
-            self.lang = "ja" if self.lang == "en" else "en"
+        def on_lang(self, _event=None):
+            picked = self.lang_var.get()
+            self.lang = "ja" if picked == "日本語" else "en"
+            self.lang_var.set("日本語" if self.lang == "ja" else "English")
             self.settings["lang"] = self.lang
             save_settings(self.settings)
+            self.root.title(self.tr("subtitle"))
             self.enable_btn.configure(text=self.tr("enable"))
             self.filter_btn.configure(text=self.tr("filter"))
             self.avatar_lbl.configure(text=self.tr("avatar"))
             self.import_btn.configure(text=self.tr("import"))
             self.listen_lbl.configure(text=self.tr("listen"))
+            self.host_lbl.configure(text=self.tr("host"))
+            self.port_lbl.configure(text=self.tr("port"))
+            self.lang_lbl.configure(text=self.tr("language"))
+            self._show_field_errors()
             self._reload_rows()
+
+        def _show_note(self, label, text):
+            label.configure(text=text)
+            mapped = bool(label.winfo_ismapped())
+            if text and not mapped:
+                label.pack(fill="x", padx=8, pady=(2, 0), before=self.status)
+            elif not text and mapped:
+                label.pack_forget()
+
+        def _present_error(self, err):
+            key = {
+                "profile pack must be a .zip, a folder, or profile.json": "import_bad_pack",
+                "unsafe path in profile pack": "import_unsafe",
+                "profile.json not found": "import_missing",
+            }.get(err)
+            return self.tr(key) if key else err
 
         def _poll(self):
             listener = expression_listener()
             state = self.tr("running") if listener.is_running() else self.tr("stopped")
-            last = listener.last or "-"
+            last = listener.last or self.tr("none")
             avatar = self._avatar_listener
             if avatar is not None and avatar.ok:
                 port_state = self.tr("ok")
@@ -1662,6 +1809,13 @@ def run_gui():
             else:
                 port_state = ""
             self.status.configure(text=f"{state} | {self.tr('last')}: {last} {port_state}")
+            problem = listener.key_problem if self.enabled.get() else "ok"
+            warning = {
+                "permission": "key_permission",
+                "none": "key_none",
+                "unavailable": "key_unsupported",
+            }.get(problem, "")
+            self._show_note(self.warn, self.tr(warning) if warning else "")
             self.root.after(400, self._poll)
 
         def _shot(self, path):
